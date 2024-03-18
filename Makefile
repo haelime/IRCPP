@@ -5,7 +5,7 @@ CXXFLAGS = -Wall -Werror -Wextra
 
 SOURCE = $(wildcard *.cpp)
 OBJECTS = $(SOURCE:.cpp=.o)
-headers = $(wildcard *.hpp)
+HEADERS = $(wildcard *.hpp)
 
 all: $(TARGET)
 
