@@ -3,14 +3,19 @@ TARGET = ircserv
 CXX = c++
 CXXFLAGS = -Wall -Werror -Wextra
 
-SOURCE = $(wildcard *.cpp)
+SOURCE = $(wildcard ./srcs/*.cpp)
 OBJECTS = $(SOURCE:.cpp=.o)
-HEADERS = $(wildcard *.hpp)
+
+HEADERS = -I./include/\
+
 
 all: $(TARGET)
 
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@ $(HEADERS)
+
 $(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clean:
 	rm -f $(OBJECTS)
