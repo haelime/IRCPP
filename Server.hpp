@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "client.hpp"
+#include "Client.hpp"
 
 #define SOCKET_ERROR (-1)
 
@@ -117,5 +117,8 @@ private:
 
     int mhKq;
 
-    std::vector<Client*> mClients;
+    // key is socket, value is Client, which contains all the information
+    // when a new client connects, a new Client object is created and added
+    // when a client disconnects, the Client object is deleted
+    std::map<int, Client*> mClients;
 };
