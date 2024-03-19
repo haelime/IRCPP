@@ -2,16 +2,17 @@
 #include "Client.hpp"
 #include "Server.hpp"
 
-int main (int argc, char**argv)
+int main (int argc, char **argv)
 {
     Server server;
 
-    if (!server.isValidArgv(argc, argv))
+    if (!server.checkAndSetArgv(argc, argv))
     {
         server.printUsage(argv);
         exit(1);
     }
-    server.init();
+
+    server.init_server();
 
     
 
