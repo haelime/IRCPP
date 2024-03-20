@@ -8,13 +8,21 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <utility>
 
 #include "Client.hpp"
 
+#define SOCKET_FD (int)
+#define KQUEUE_FD (int)
 #define SOCKET_ERROR (-1)
 
 #define MAX_PASSWORD_LENGTH (256)
 #define MAX_PORT_NUMBER (65535)
+
+#define MAX_EVENTS (1024)
+#define MAX_MESSAGE_LENGTH (512)
+#define MAX_NICKNAME_LENGTH (9)
+
 class Server
 {
 public:
@@ -54,7 +62,7 @@ public:
     void init_server(void)
     {
         // make socket FD
-        mServerListenSocket = socket(PF_INET, SOCK_STREAM, 0);
+        mServerListenSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 
         if (SOCKET_ERROR == mServerListenSocket)
         {
@@ -103,14 +111,14 @@ public:
         mEvent.data = 0; // it means Filter-specific data value
         mEvent.udata = NULL; // no user data
 
-        // is it nessasary? IDK
+        // is it nessasary? IDK but it's fast enough
         memset(&mEventBuffer, 0, sizeof(mEventBuffer));
 
-        std::cout << "Server is running on port " << mPort << " with password " << mServerPassword << "\n";
+        std::cout << "Server is initiating on port " << mPort << " with password " << mServerPassword << "\n";
     }
 
     void run()
-    {        
+    {
         timespec timespecInf;
         timespecInf.tv_nsec = 0;
         timespecInf.tv_sec = 0;
@@ -123,46 +131,166 @@ public:
             exit(1);
         }
 
-        
-        if (mEventBuffer[0].flags & EV_EOF)
+        // main loop for server
+        while (true)
         {
-            std::cout << "Client disconnected\n";
-            close(mEventBuffer[0].ident);
-        }
-        else
-        {
-            std::cout << "Client connected\n";
-            Client* client = new Client(mEventBuffer[0].ident);
-            mClients.push_back(client);
+            // kevent returns number of events placed in the eventlist
+            int eventCount = kevent(mhKq, NULL, 0, mEventBuffer, 1024, &timespecInf);
+            if (SOCKET_ERROR == eventCount)
+            {
+                std::perror("kevent");
+                close(mServerListenSocket);
+                exit(1);
+            }
+
+            if (eventCount != 0)
+            {
+                // handle events
+                for (int i = 0; i < eventCount; i++)
+                {
+                    // if it's read event and it's server socket, it means client is trying to connect
+                    if (mEventBuffer[i].flags & EVFILT_READ)
+                    {
+                        // if it's server socket, it means new client is trying to connect
+                        if (mEventBuffer[i].ident == mServerListenSocket)
+                        {
+                            sockaddr_in newClientAddress;
+                            socklen_t newClientAddressLength = sizeof(newClientAddress);
+                            SOCKET_FD newClientSocket = accept(mServerListenSocket, (sockaddr*)&newClientAddress, &newClientAddressLength);
+                            fnctrl(newClientSocket, F_SETFL, O_NONBLOCK);
+                            if (SOCKET_ERROR == newClientSocket)
+                            {
+                                std::perror("accept");
+                                close(mServerListenSocket);
+                                exit(1);
+                            }
+
+                            // add new client to kqueue
+                            struct kevent newClientEvent;
+                            newClientEvent.ident = newClientSocket;
+                            newClientEvent.filter = EVFILT_READ;
+                            newClientEvent.flags = EV_ADD;
+                            newClientEvent.data = 0;
+                            newClientEvent.udata = NULL;
+                            if (SOCKET_ERROR == kevent(mhKq, &newClientEvent, 1, NULL, 0, &timespecInf))
+                            {
+                                std::perror("kevent newClientEvent");
+                                close(mServerListenSocket);
+                                close(newClientSocket);
+                                exit(1);
+                            }
+
+                            // create new client object
+                            Client* newClient = new Client(newClientAddress);
+
+                            // it's same as mClients.insert(std::pair<SOCKET_FD, Client*>(newClientSocket, newClient));
+                            mClients[newClientSocket] = newClient;
+                        }
+
+                        // if it's not server socket, it means client is trying to send message
+                        else
+                        {
+                            // find the client
+                            Client* client = mClients[mEventBuffer[i].ident]; // cuz it's map, it's O(logN)
+                            if (client == NULL)
+                            {
+                                std::cerr << "Client not found, closing socket\n";
+                                close(mEventBuffer[i].ident);
+                                continue;
+                            }
+
+                            // get message from client
+                            char message[MAX_MESSAGE_LENGTH];
+                            int messageLength = recv(mEventBuffer[i].ident, message, MAX_MESSAGE_LENGTH, 0);
+                            if (SOCKET_ERROR == messageLength)
+                            {
+                                std::perror("recv");
+                                close(mEventBuffer[i].ident);
+                                continue;
+                            }
+
+                            // if message is empty, it means client disconnected
+                            if (messageLength == 0)
+                            {
+                                // delete client object
+                                delete client;
+                                mClients.erase(mEventBuffer[i].ident);
+                                close(mEventBuffer[i].ident);
+                                continue;
+                            }
+
+                            // handle message
+                            // push message to message Queue with it's client information
+                            mServerMessageQueue.push(std::pair<SOCKET_FD, std::string>(mEventBuffer[i].ident, std::string(message)));
+                        }
+
+                    }
+                }
+            }
+            // if there is no event, we can push messages to clients
+            else
+            {
+                // TODO : push messages to clients
+                // we must check message's validity, hence we need to parse it, and store it in the client object
+                while (!mServerMessageQueue.empty())
+                {
+                    std::pair<SOCKET_FD, std::string> message = mServerMessageQueue.front();
+                    mServerMessageQueue.pop();
+
+                    // find the client
+                    Client* client = mClients[message.first]; // cuz it's map, it's O(logN)
+                    if (client == NULL)
+                    {
+                        std::cerr << "Client not found, closing socket\n";
+                        close(message.first);
+                        continue;
+                    }
+
+                    // handle message
+                    // parse message and store it in the client object, if it is valid message then push it to the chennel's message queue
+
+
+                }
+                continue;
+            }
         }
 
-        
+
+
 
 
     }
 
-// server network data
 private:
-    int mServerListenSocket;
+
+    // server network data
+private:
+    SOCKET_FD mServerListenSocket;
     sockaddr_in mServerAddress;
     socklen_t mServerAddressLength;
 
-    int mhKq;
+    KQUEUE_FD mhKq;
     struct kevent mEvent;
 
-    // key is socket, value is Client, which contains all the information
+    // key is socket, value is Client, which contains all the information about the client
     // when a new client connects, a new Client object is created and added
     // when a client disconnects, the Client object is deleted
-    std::map<int, Client*> mClients;
 
 
 // arguments
 private:
     int mPort;
     std::string mServerPassword;
-    
-private:
-    std::vector<Client*> mClients;
 
+// server data
+private:
+    // Client has is's channel information, so we don't need to store channel information in server
+    std::map<SOCKET_FD, Client*> mClients;
+    std::map<std::string, Channel*> mChannels;
+
+    std::queue<std::pair<SOCKET_FD, std::string>> mServerMessageQueue;
     struct kevent mEventBuffer[1024];
+
+    time_t mServerStartTime;
+    time_t mServerLastPingTime; // to kick if not received in 2 seconds
 };
