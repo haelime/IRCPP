@@ -15,12 +15,14 @@ all: $(TARGET)
 	$(CXX) $(CXXFLAGS) -c $< -o $@ $(HEADERS)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(HEADERS)
 
 clean:
 	rm -f $(OBJECTS)
 
 fclean:
 	rm -f $(TARGET) $(OBJECTS)
-	
+
+re: fclean all
+
 .PHONY: all clean

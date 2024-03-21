@@ -6,26 +6,26 @@
 #include <map>
 #include "Channel.hpp"
 
-// Client Must have it's information to be able to send and receive messages
-class Client
+class Channel;
+
+// ClientData Must have it's information, and it's connected channels
+class ClientData
 {
+
 public: // constructor, destructor
-    Client(sockaddr_in newClientAddress) {};
-    virtual ~Client() {};
-
-
-
-
-
+    ClientData(sockaddr_in newClientAddress) :mClientAddress(newClientAddress) {};
+    virtual ~ClientData() {};
 
 private:
     // prevent copy
-    Client() {};
-    Client(const Client& rhs) { (void)rhs; };
-    Client& operator=(const Client& rhs) { (void)rhs; return *this; };
+    ClientData() {};
+    ClientData(const ClientData& rhs) { (void)rhs; };
+    ClientData& operator=(const ClientData& rhs) { (void)rhs; return *this; };
 
 
 public: // getter, setters
+    const sockaddr_in& getClientAddress() const { return mClientAddress; };
+
     void setClientNickname(std::string& nickname) { mClientNickname = nickname; };
     const std::string& getClientNickname() const { return mClientNickname; };
 
@@ -38,22 +38,37 @@ public: // getter, setters
     void addConnectedChannel(Channel* channel) { mConnectedChannels[channel->getChannelName()] = channel; };
     void removeConnectedChannel(Channel* channel)
     {
-        if (mConnectedChannels.find(channel->getChannelName() != mConnectedChannels.end()))
+        if (mConnectedChannels.find(channel->getChannelName()) != mConnectedChannels.end())
         {
             delete mConnectedChannels[channel->getChannelName()];
         }
         mConnectedChannels.erase(channel->getChannelName());
     };
+
+    std::string& getReceivedData(void) { return mReceivedData; };
+
     const std::map <std::string, Channel*>& getConnectedChannels() { return mConnectedChannels; };
+
+public:
+    // should handle error if the data is too big
+    void appendData(const std::string& data)
+    {
+        mReceivedData.append(data);
+    };
+
+    void clearData()
+    {
+        mReceivedData.clear();
+    };
+
 
 private:
     // Client's nickname, empty if not set
     std::string mClientNickname;
 
-    // Client's Real Name(Address), Can be empty, must be unique
+    // Client's Real Name(Address), Cannot be empty, must be unique
     sockaddr_in mClientAddress;
-    // Client's status
-    // bool status;
+
     // Client's last message time to limit 2 seconds
     time_t lastMessageTime;
     // Client's last ping time to kick if not received in 2 seconds
@@ -62,5 +77,6 @@ private:
     std::map <std::string, Channel*> mConnectedChannels;
 
 private:
-    std::string mReceivedMessage;
+    std::string mReceivedData;
+
 };

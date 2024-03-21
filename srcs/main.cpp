@@ -1,6 +1,6 @@
 
-#include "Client.hpp"
 #include "Server.hpp"
+#include "ClientData.hpp"
 #include "Channel.hpp"
 
 int main (int argc, char **argv)
@@ -13,9 +13,13 @@ int main (int argc, char **argv)
         exit(1);
     }
 
-    server.init_server();
+    // Logger::setFileLogging("log.txt");
+    Logger::setConsoleLogging(true);
 
-    
+    server.init_server();
+    server.run();
+
+    // Logger::closeFileLogging();
 
     return 0;
 }
