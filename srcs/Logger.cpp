@@ -76,6 +76,7 @@ void Logger::log(LogLevel logLevel, const std::string& logMessage)
 
     std::stringstream ss;
 
+    // TODO : handle ANSI color codes for file logging
     switch (logLevel)
     {
     case INFO:
