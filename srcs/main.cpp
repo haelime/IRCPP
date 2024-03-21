@@ -13,8 +13,9 @@ int main (int argc, char **argv)
         exit(1);
     }
 
-    // Logger::setFileLogging("log.txt");
     Logger::setConsoleLogging(true);
+    Logger::setFileLogging("log.txt");
+    Logger::setLogLevelLimit(INFO);
 
     server.init_server();
     server.run();

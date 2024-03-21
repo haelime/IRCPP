@@ -8,7 +8,7 @@ void Server::init_server(void)
 {
     // make socket FD
     mServerListenSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-
+    Logger::log(INFO, "Server is creating socket...");
     if (SOCKET_ERROR == mServerListenSocket)
     {
         Logger::log(FATAL, "Failed to create socket");
@@ -16,6 +16,7 @@ void Server::init_server(void)
         assert(0);
         exit(1);
     }
+    Logger::log(INFO, "Server created socket");
 
     // set Server's address
     mServerAddress.sin_addr.s_addr = INADDR_ANY;
@@ -25,6 +26,7 @@ void Server::init_server(void)
     mServerAddressLength = mServerAddress.sin_len;
 
     // bind server's address & port
+    Logger::log(INFO, "Server is binding socket...");
     if (SOCKET_ERROR == bind(mServerListenSocket, (const sockaddr*)&mServerAddress,
         mServerAddressLength))
     {
@@ -34,8 +36,10 @@ void Server::init_server(void)
         assert(0);
         exit(1);
     }
+    Logger::log(INFO, "Server binded socket");
 
     // start listening on port
+    Logger::log(INFO, "Server is listening on socket...");
     if (SOCKET_ERROR == listen(mServerListenSocket, SOMAXCONN))
     {
         Logger::log(FATAL, "Failed to listen on socket");
@@ -46,6 +50,7 @@ void Server::init_server(void)
     }
 
     // init kq
+    Logger::log(INFO, "Server is creating kqueue...");
     mhKq = kqueue();
     if (SOCKET_ERROR == mhKq)
     {
@@ -55,6 +60,7 @@ void Server::init_server(void)
         assert(0);
         exit(1);
     }
+    Logger::log(INFO, "Server created kqueue");
 
     // add event filter
     
@@ -64,18 +70,12 @@ void Server::init_server(void)
     mEvent.data = 0; // it means Filter-specific data value
     mEvent.udata = NULL; // no user data
 
+
     // is it nessasary? IDK but it's fast enough
     mEventVector.reserve(256);
 
     Logger::log(INFO, "Server is initiating...");
-}
 
-void Server::run()
-{
-    // to wait for event infinitely or just for 0 seconds
-    // timespec timespecInf;
-    // timespecInf.tv_nsec = 0;
-    // timespecInf.tv_sec = 0;
 
     // kevent returns number of events placed in the eventlist
     if (KQUEUE_ERROR == kevent(mhKq, &mEvent, 1, NULL, 0, NULL))
@@ -87,13 +87,27 @@ void Server::run()
         exit(1);
     }
 
+    Logger::log(INFO, "");
+    std::cout << "Sucessfully initiated server on port " << ANSI_YELLOW << mPort << ANSI_RESET << " with password " << ANSI_YELLOW << mServerPassword << ANSI_RESET << std::endl;
+}
+
+void Server::run()
+{
+    // to wait for event infinitely or just for 0 seconds
+    // timespec timespecInf;
+    // timespecInf.tv_nsec = 0;
+    // timespecInf.tv_sec = 0;
+
+    // [2021-01-01 12:00:00]
     mServerStartTime = time(NULL);
-    mServerLastPingTime = time(NULL);
+    std::tm* startTime = std::localtime(&mServerStartTime);
+    std::stringstream ss;
+    ss << "[" << startTime->tm_year + 1900 << "-" << startTime->tm_mon + 1 << "-" << startTime->tm_mday << " " << startTime->tm_hour << ":" << startTime->tm_min << ":" << startTime->tm_sec << "] ";
+    std::string timeString = ss.str();
 
     Logger::log(INFO, "");
-    std::cout << "Sucessfully initiated server on port " << ANSI_YELLOW << mPort << ANSI_RESET << " with password " << ANSI_YELLOW << mServerPassword << ANSI_RESET << "\n";
-    Logger::log(INFO, "");
-    std::cout << "Server started at " << ANSI_YELLOW << ctime(&mServerStartTime) << ANSI_RESET << "\n";
+    std::cout << "Server started at " << ANSI_YELLOW << timeString << ANSI_RESET << std::endl;
+    mServerLastPingTime = time(NULL);
 
     // main loop for server
     while (true)

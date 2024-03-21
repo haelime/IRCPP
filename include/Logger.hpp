@@ -8,15 +8,30 @@
 
 #include "AnsiColorDefines.hpp"
 
-enum LogLevel
-{
-    DEFAULT,
-    INFO,
-    WARNING,
-    ERROR,
-    DEBUG,
-    FATAL
-};
+typedef unsigned int LogLevel;
+
+#define DEFAULT (1)
+#define DEBUG   (2)
+#define INFO    (4)
+#define WARNING (8)
+#define ERROR   (16)
+#define FATAL   (32)
+
+#define LOG_DEBUG(logMessage) Logger::log(DEBUG, logMessage)
+#define LOG_INFO(logMessage) Logger::log(INFO, logMessage)
+#define LOG_WARNING(logMessage) Logger::log(WARNING, logMessage)
+#define LOG_ERROR(logMessage) Logger::log(ERROR, logMessage)
+#define LOG_FATAL(logMessage) Logger::log(FATAL, logMessage)
+
+// enum LogLevel
+// {
+//     DEFAULT,
+//     DEBUG,
+//     INFO,
+//     WARNING,
+//     ERROR,
+//     FATAL
+// };
 
 class Logger
 {
@@ -24,6 +39,8 @@ public:
     static void setFileLogging(const std::string& fileName);
     static void setConsoleLogging(bool isConsoleLogging);
     static void closeFileLogging();
+
+    static void setLogLevelLimit(LogLevel logLevelLimit);
 
     static void log(LogLevel logLevel, const std::string& logMessage);
 
@@ -39,6 +56,8 @@ private:
     static bool             mIsFileLogging;
     static bool             mIsConsoleLogging;
     static bool             mIsCerr;
+
+    static unsigned int     mLogLevelLimit;
 
     static std::string      mFileName;
     static std::ofstream    logFile;

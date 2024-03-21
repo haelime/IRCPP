@@ -5,6 +5,7 @@ bool             Logger::mIsConsoleLogging;
 bool             Logger::mIsCerr;
 std::string      Logger::mFileName;
 std::ofstream    Logger::logFile;
+unsigned int     Logger::mLogLevelLimit;
 
 void Logger::setFileLogging(const std::string& fileName)
 {
@@ -22,6 +23,11 @@ void Logger::setFileLogging(const std::string& fileName)
 void Logger::setConsoleLogging(bool isConsoleLogging)
 {
     mIsConsoleLogging = isConsoleLogging;
+}
+
+void Logger::setLogLevelLimit(LogLevel logLevelLimit)
+{
+    Logger::mLogLevelLimit = logLevelLimit;
 }
 
 void Logger::closeFileLogging()
@@ -68,44 +74,45 @@ void Logger::log(LogLevel logLevel, const std::string& logMessage)
         break;
     }
 
-    std::time_t currentTime = std::time(0);
-    std::tm* now = std::localtime(&currentTime);
     std::stringstream ss;
 
-    // [2021-01-01 12:00:00]
-    ss << "[" << now->tm_year + 1900 << "-" << now->tm_mon + 1 << "-" << now->tm_mday << " " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << "] ";
-
-    std::string timeString = ss.str();
-
-    // [2021-01-01 12:00:00] INFO : logMessage
     switch (logLevel)
     {
     case INFO:
-        ss << ANSI_GREEN << timeString << logLevelString << " : " << logMessage << ANSI_RESET;
+        ss << ANSI_GREEN << "[" << logLevelString << "]" << ANSI_RESET;
         break;
     case WARNING:
-        ss << ANSI_YELLOW << timeString << logLevelString << " : " << logMessage << ANSI_RESET;
+        ss << ANSI_YELLOW << "[" << logLevelString << "]" << ANSI_RESET;
         break;
     case ERROR:
-        ss << ANSI_RED << timeString << logLevelString << " : " << logMessage << ANSI_RESET;
+        ss << ANSI_RED << "[" << logLevelString << "]" << ANSI_RESET;
         break;
     case DEBUG:
-        ss << ANSI_CYAN << timeString << logLevelString << " : " << logMessage << ANSI_RESET;
+        ss << ANSI_CYAN << "[" << logLevelString << "]" << ANSI_RESET;
         break;
     case FATAL:
-        ss << ANSI_BRED << timeString << logLevelString << " : " << logMessage << ANSI_RESET;
+        ss << ANSI_BRED << "[" << logLevelString << "]" << ANSI_RESET;
         break;
     default:
-        ss << timeString << " : " << logMessage;
+        ss << "[" << logLevelString << "]";
         break;
     }
 
+    ss << " ";
+
+    // [2021-01-01 12:00:00]
+    std::time_t currentTime = std::time(0);
+    std::tm* now = std::localtime(&currentTime);
+    ss << "[" << now->tm_year + 1900 << "-" << now->tm_mon + 1 << "-" << now->tm_mday << " " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << "]";
+    ss << " : ";
+    ss << logMessage;
+
     std::string logString = ss.str();
 
-    if (mIsFileLogging)
+    if (mIsFileLogging && (mLogLevelLimit & logLevel))
         logToFile(logString);
 
-    if (mIsConsoleLogging)
+    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
         logToConsole(logString, mIsCerr);
 }
 
@@ -165,14 +172,14 @@ void Logger::logEmptyString(LogLevel logLevel)
     }
     logLevelString = color + "[" + logLevelString + "]" + ANSI_RESET + " ";
 
-    if (mIsConsoleLogging)
+    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
     {
         if (mIsCerr)
             std::cerr << logLevelString;
         else
             std::cout << logLevelString;
     }
-    if (mIsFileLogging)
+    if (mIsFileLogging && (mLogLevelLimit & logLevel))
     {
         if (!logFile.is_open())
         {
