@@ -14,5 +14,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: make
+    - name: make server and test client
       run: make
+
+    - name: run server
+      run: ./ircserv 6667 1234
+
