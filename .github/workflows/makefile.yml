@@ -7,15 +7,6 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-test:
-    runs-on: macos-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: make server and test client
-      run: make
-
   test-server:
     runs-on: macos-latest
     steps:
@@ -33,7 +24,6 @@ jobs:
 
     
   test-client:
-    needs: [build-test]
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -47,6 +37,6 @@ jobs:
 
       - name: Run client tests
         run: |
-            sleep(30)
+            sleep 20
             ./testClient
           # 클라이언트 테스트 실행
