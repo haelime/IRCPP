@@ -1,4 +1,6 @@
-#include "Logger.hpp" 
+#include "Logger.hpp"
+
+// There is A LOT to REFACTOR here.
 
 bool             Logger::mIsFileLogging;
 bool             Logger::mIsConsoleLogging;
@@ -6,6 +8,8 @@ bool             Logger::mIsCerr;
 std::string      Logger::mFileName;
 std::ofstream    Logger::logFile;
 unsigned int     Logger::mLogLevelLimit;
+std::string      Logger::mLogLevelString;
+std::string      Logger::mLogColor;
 
 void Logger::setFileLogging(const std::string& fileName)
 {
@@ -20,12 +24,12 @@ void Logger::setFileLogging(const std::string& fileName)
     }
 }
 
-void Logger::setConsoleLogging(bool isConsoleLogging)
+void Logger::setConsoleLogging(const bool isConsoleLogging)
 {
     mIsConsoleLogging = isConsoleLogging;
 }
 
-void Logger::setLogLevelLimit(LogLevel logLevelLimit)
+void Logger::setLogLevelLimit(const LogLevel logLevelLimit)
 {
     Logger::mLogLevelLimit = logLevelLimit;
 }
@@ -41,7 +45,7 @@ void Logger::closeFileLogging()
     }
 }
 
-void Logger::log(LogLevel logLevel, const std::string& logMessage)
+void Logger::log(const LogLevel logLevel, const std::string& logMessage)
 {
     if (logMessage.empty())
     {
@@ -49,55 +53,46 @@ void Logger::log(LogLevel logLevel, const std::string& logMessage)
         return;
     }
 
-    std::string logLevelString;
-    switch (logLevel)
-    {
-    case INFO:
-        logLevelString = "INFO";
-        break;
-    case WARNING:
-        logLevelString = "WARNING";
-        break;
-    case DEBUG:
-        logLevelString = "DEBUG";
-        break;
-    case ERROR:
-        logLevelString = "ERROR";
-        mIsCerr = true;
-        break;
-    case FATAL:
-        logLevelString = "FATAL";
-        mIsCerr = true;
-        break;
-    default:
-        logLevelString = "UNKNOWN";
-        break;
-    }
+    if (mIsFileLogging && (mLogLevelLimit & logLevel))
+        logToFile(logLevel, logMessage);
+
+    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
+        logToConsole(logLevel, logMessage);
+}
+
+void Logger::logToFile(const LogLevel logLevel, const std::string& logMessage)
+{
+    const std::string logLevelString = Logger::getLogLevelString(logLevel);
 
     std::stringstream ss;
 
-    // TODO : handle ANSI color codes for file logging
-    switch (logLevel)
+    // Sadly, file cannot render ANSI color
+    ss << "[" << logLevelString << "]";
+
+    // [2021-01-01 12:00:00]
+    std::time_t currentTime = std::time(0);
+    std::tm* now = std::localtime(&currentTime);
+    ss << "[" << now->tm_year + 1900 << "-" << now->tm_mon + 1 << "-" << now->tm_mday << " " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << "]";
+    ss << " ";
+    ss << logMessage;
+
+    if (!logFile.is_open())
     {
-    case INFO:
-        ss << ANSI_GREEN << "[" << logLevelString << "]" << ANSI_RESET;
-        break;
-    case WARNING:
-        ss << ANSI_YELLOW << "[" << logLevelString << "]" << ANSI_RESET;
-        break;
-    case ERROR:
-        ss << ANSI_RED << "[" << logLevelString << "]" << ANSI_RESET;
-        break;
-    case DEBUG:
-        ss << ANSI_CYAN << "[" << logLevelString << "]" << ANSI_RESET;
-        break;
-    case FATAL:
-        ss << ANSI_BRED << "[" << logLevelString << "]" << ANSI_RESET;
-        break;
-    default:
-        ss << "[" << logLevelString << "]";
-        break;
+        Logger::log(ERROR, "Failed log to file, logging on console only");
+        mIsFileLogging = false;
+        return;
     }
+    logFile << ss.str() << std::endl;
+}
+
+void Logger::logToConsole(const LogLevel logLevel, const std::string& logMessage)
+{
+    const std::string logLevelString = getLogLevelString(logLevel);
+    const std::string color = getLogLevelColor(logLevel);
+
+    std::stringstream ss;
+
+    ss << color << "[" << logLevelString << "]" << ANSI_RESET;
 
     ss << " ";
 
@@ -105,93 +100,83 @@ void Logger::log(LogLevel logLevel, const std::string& logMessage)
     std::time_t currentTime = std::time(0);
     std::tm* now = std::localtime(&currentTime);
     ss << "[" << now->tm_year + 1900 << "-" << now->tm_mon + 1 << "-" << now->tm_mday << " " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << "]";
-    ss << " : ";
+    ss << " ";
     ss << logMessage;
 
-    std::string logString = ss.str();
-
-    if (mIsFileLogging && (mLogLevelLimit & logLevel))
-        logToFile(logString);
-
-    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
-        logToConsole(logString, mIsCerr);
-}
-
-void Logger::logToFile(const std::string& logMessage)
-{
-    if (!logFile.is_open())
+    if (mIsCerr)
     {
-        Logger::log(ERROR, "Failed log to file, logging on console only");
-        return;
-    }
-    logFile << logMessage << std::endl;
-}
-
-void Logger::logToConsole(const std::string& logMessage, bool isCerr)
-{
-    if (isCerr)
-    {
-        std::cerr << logMessage << std::endl;
+        std::cerr << ss.str() << std::endl;
     }
     else
     {
-        std::cout << logMessage << std::endl;
+        std::cout << ss.str() << std::endl;
     }
 }
 
-void Logger::logEmptyString(LogLevel logLevel)
+void Logger::logEmptyString(const LogLevel logLevel)
 {
-    std::string logLevelString;
-    std::string color;
-    switch (logLevel)
-    {
-    case INFO:
-        color = ANSI_GREEN;
-        logLevelString = "INFO";
-        break;
-    case WARNING:
-        color = ANSI_YELLOW;
-        logLevelString = "WARNING";
-        break;
-    case DEBUG:
-        color = ANSI_CYAN;
-        logLevelString = "DEBUG";
-        break;
-    case ERROR:
-        color = ANSI_RED;
-        logLevelString = "ERROR";
-        mIsCerr = true;
-        break;
-    case FATAL:
-        color = ANSI_BRED;
-        logLevelString = "FATAL";
-        mIsCerr = true;
-        break;
-    default:
-        logLevelString = "UNKNOWN";
-        break;
-    }
-    logLevelString = color + "[" + logLevelString + "]" + ANSI_RESET + " ";
+    const std::string logLevelString = getLogLevelString(logLevel);
+    const std::string color = getLogLevelColor(logLevel);
 
-    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
-    {
-        if (mIsCerr)
-            std::cerr << logLevelString;
-        else
-            std::cout << logLevelString;
-    }
     if (mIsFileLogging && (mLogLevelLimit & logLevel))
     {
         if (!logFile.is_open())
         {
             Logger::log(ERROR, "Failed log to file, logging on console only");
-            Logger::mIsFileLogging = false;
+            mIsFileLogging = false;
             return;
         }
-        logFile << logLevelString;
+        logFile << "[" << logLevelString << "] ";
+    }
+
+    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
+    {
+        const std::string logLevelString = getLogLevelString(logLevel);
+
+        if (mIsCerr)
+            std::cerr << color << "[" <<  logLevelString << "]"<< ANSI_RESET << " ";
+        else
+            std::cout << color << "[" <<  logLevelString << "]" << ANSI_RESET << " " ;
     }
 }
 
+const std::string& Logger::getLogLevelString(const LogLevel logLevel)
+{
+    switch (logLevel)
+    {
+    case INFO:
+        return Logger::mLogLevelString = "INFO";
+    case WARNING:
+        return Logger::mLogLevelString = "WARNING";
+    case DEBUG:
+        return Logger::mLogLevelString = "DEBUG";
+    case ERROR:
+        return Logger::mLogLevelString = "ERROR";
+    case FATAL:
+        return Logger::mLogLevelString = "FATAL";
+    default:
+        return Logger::mLogLevelString = "";
+    }
+}
 
-Logger::Logger(){}
-Logger::~Logger(){}
+const std::string& Logger::getLogLevelColor(const LogLevel logLevel)
+{
+    switch (logLevel)
+    {
+    case INFO:
+        return Logger::mLogColor = ANSI_GREEN;
+    case WARNING:
+        return Logger::mLogColor = ANSI_YELLOW;
+    case DEBUG:
+        return Logger::mLogColor = ANSI_CYAN;
+    case ERROR:
+        return Logger::mLogColor = ANSI_RED;
+    case FATAL:
+        return Logger::mLogColor = ANSI_BRED;
+    default:
+        return Logger::mLogColor = "";
+    }
+}
+
+Logger::Logger() {}
+Logger::~Logger() {}

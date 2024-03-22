@@ -4,11 +4,13 @@
 #include "Channel.hpp"
 #include "Logger.hpp"
 
+// TODO : NEED TO FIX EVERY std::to_string()
+
 void Server::init_server(void)
 {
     // make socket FD
     mServerListenSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-    Logger::log(INFO, "Server is creating socket...");
+    Logger::log(DEBUG, "Server is creating socket...");
     if (SOCKET_ERROR == mServerListenSocket)
     {
         Logger::log(FATAL, "Failed to create socket");
@@ -16,7 +18,7 @@ void Server::init_server(void)
         assert(0);
         exit(1);
     }
-    Logger::log(INFO, "Server created socket");
+    Logger::log(DEBUG, "Server created socket");
 
     // set Server's address
     mServerAddress.sin_addr.s_addr = INADDR_ANY;
@@ -26,7 +28,7 @@ void Server::init_server(void)
     mServerAddressLength = mServerAddress.sin_len;
 
     // bind server's address & port
-    Logger::log(INFO, "Server is binding socket...");
+    Logger::log(DEBUG, "Server is binding socket...");
     if (SOCKET_ERROR == bind(mServerListenSocket, (const sockaddr*)&mServerAddress,
         mServerAddressLength))
     {
@@ -36,10 +38,10 @@ void Server::init_server(void)
         assert(0);
         exit(1);
     }
-    Logger::log(INFO, "Server binded socket");
+    Logger::log(DEBUG, "Server binded socket");
 
     // start listening on port
-    Logger::log(INFO, "Server is listening on socket...");
+    Logger::log(DEBUG, "Server is listening on socket...");
     if (SOCKET_ERROR == listen(mServerListenSocket, SOMAXCONN))
     {
         Logger::log(FATAL, "Failed to listen on socket");
@@ -50,7 +52,7 @@ void Server::init_server(void)
     }
 
     // init kq
-    Logger::log(INFO, "Server is creating kqueue...");
+    Logger::log(DEBUG, "Server is creating kqueue...");
     mhKq = kqueue();
     if (SOCKET_ERROR == mhKq)
     {
@@ -60,10 +62,9 @@ void Server::init_server(void)
         assert(0);
         exit(1);
     }
-    Logger::log(INFO, "Server created kqueue");
+    Logger::log(DEBUG, "Server created kqueue");
 
     // add event filter
-    
     mEvent.ident = mServerListenSocket; // trace this socket
     mEvent.filter = EVFILT_READ; // when read event occurs
     mEvent.flags = EV_ADD; // add event, if it's already added, it will be ignored
@@ -72,9 +73,9 @@ void Server::init_server(void)
 
 
     // is it nessasary? IDK but it's fast enough
-    mEventVector.reserve(256);
+    mEventVector.resize(256);
 
-    Logger::log(INFO, "Server is initiating...");
+    Logger::log(DEBUG, "Server is initiating...");
 
 
     // kevent returns number of events placed in the eventlist
@@ -87,8 +88,12 @@ void Server::init_server(void)
         exit(1);
     }
 
-    Logger::log(INFO, "");
-    std::cout << "Sucessfully initiated server on port " << ANSI_YELLOW << mPort << ANSI_RESET << " with password " << ANSI_YELLOW << mServerPassword << ANSI_RESET << std::endl;
+    std::stringstream ss;
+    
+    Logger::log(INFO, "Sucessfully initiated server");
+    Logger::log(INFO, "Server is listening on port " + std::to_string(mPort) + " with password " + mServerPassword);
+    Logger::log(DEBUG, "Port : " + std::to_string(mPort));
+    Logger::log(DEBUG, "Password : " + mServerPassword);
 }
 
 void Server::run()
@@ -100,21 +105,22 @@ void Server::run()
 
     // [2021-01-01 12:00:00]
     mServerStartTime = time(NULL);
-    std::tm* startTime = std::localtime(&mServerStartTime);
-    std::stringstream ss;
-    ss << "[" << startTime->tm_year + 1900 << "-" << startTime->tm_mon + 1 << "-" << startTime->tm_mday << " " << startTime->tm_hour << ":" << startTime->tm_min << ":" << startTime->tm_sec << "] ";
-    std::string timeString = ss.str();
-
-    Logger::log(INFO, "");
-    std::cout << "Server started at " << ANSI_YELLOW << timeString << ANSI_RESET << std::endl;
+    
+    Logger::log(INFO, "Server is running...");
     mServerLastPingTime = time(NULL);
 
     // main loop for server
+    // it will run until server is stopped and check event for every 1 second
+    timespec serverTick;
+    serverTick.tv_nsec = 0; // 1000000 * 50 == 50 milliseconds
+    serverTick.tv_sec = 0;
     while (true)
     {
         // kevent returns number of events placed in the eventlist
-        int eventCount = kevent(mhKq, NULL, 0, &mEventVector[0], mEventVector.size(), NULL);
-        if (KQUEUE_ERROR == eventCount)
+        // Logger::log(DEBUG, "Server is waiting for event...");
+        size_t eventCount = kevent(mhKq, NULL, 0, mEventVector.data(), mEventVector.size(), &serverTick);
+
+        if (KQUEUE_ERROR == (int)eventCount)
         {
             Logger::log(FATAL, "Failed to get event from kqueue");
             std::perror("kevent");
@@ -122,11 +128,48 @@ void Server::run()
             assert(0);
             exit(1);
         }
-
-        // handle events
-        for (int i = 0; i < eventCount; i++)
+        // Logger::log(DEBUG, "Server got " + std::to_string(eventCount) + " events");
+        
+        // When eventCount is almost same as mEventVector.size(), it means we need to resize mEventVector
+        // [@@@@@@@@@@ 50 ]
+        // WHY 50? I don't know, need to test
+        const int EVENTBUFFER_RESIZE_LIMIT = 50;
+        if (eventCount + EVENTBUFFER_RESIZE_LIMIT > mEventVector.size())
         {
-            if (mEventVector[i].flags & EVFILT_READ)
+            Logger::log(WARNING, "Event vector is too small, resizing...");
+            mEventVector.resize(mEventVector.size() * 2);
+            // calculate memory size to killo, megabyte, gigabyte
+            // 1. sizeof(struct kevent) * mEventVector.size()
+            size_t size = sizeof(struct kevent) * mEventVector.size();
+            if (size < 1024)
+                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size) + " bytes");
+            else if (size < 1024 * 1024)
+                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size / 1024) + " kilobytes");
+            else if (size < 1024 * 1024 * 1024)
+                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size / 1024 / 1024) + " megabytes");
+            else
+                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size / 1024 / 1024 / 1024) + " gigabytes");
+        }
+        
+        // handle events
+        for (size_t i = 0; i < eventCount; i++)
+        {
+            if (mEventVector[i].flags & EV_ERROR)
+            {
+                Logger::log(ERROR, "Error occured in kqueue");
+                std::perror("kevent");
+                close(mServerListenSocket);
+                assert(0);
+                exit(1);
+            }
+            else if (mEventVector[i].flags & EV_EOF)
+            {
+                Logger::log(DEBUG, "EOF occured in kqueue, closing socket");
+                std::perror("kevent");
+                close(mServerListenSocket);
+                assert(0);
+            }
+            else if (mEventVector[i].flags & EVFILT_READ)
             {
                 // new client is trying to connect
                 if (static_cast<int>(mEventVector[i].ident) == mServerListenSocket)
@@ -134,6 +177,7 @@ void Server::run()
                     sockaddr_in newClientAddress;
                     socklen_t newClientAddressLength = sizeof(newClientAddress);
                     SOCKET_FD newClientSocket = accept(mServerListenSocket, (sockaddr*)&newClientAddress, &newClientAddressLength);
+                    Logger::log(DEBUG, "New client is trying to connect");
                     if (SOCKET_ERROR == newClientSocket)
                     {
                         Logger::log(FATAL, "Failed to accept new client");
@@ -143,6 +187,15 @@ void Server::run()
                         exit(1);
                     }
 
+                    Logger::log(INFO, "New client connected");
+
+                    Logger::log(DEBUG, "-----------------------------------------");
+                    Logger::log(DEBUG, "SocketDescriptor : " + std::to_string(newClientSocket));
+                    Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(newClientAddress.sin_addr)));
+                    Logger::log(DEBUG, "Client's Port : " + std::to_string(ntohs(newClientAddress.sin_port)));
+                    Logger::log(DEBUG, "-----------------------------------------");
+
+                    Logger::log(DEBUG, "Setting non-blocking socket");
                     if (fcntl(newClientSocket, F_SETFL, O_NONBLOCK) == -1)
                     {
                         Logger::log(FATAL, "Failed to set non-blocking socket");
@@ -152,14 +205,18 @@ void Server::run()
                         assert(0);
                         exit(1);
                     }
+                    Logger::log(DEBUG, "Socket set to non-blocking");
 
                     // add new clientData to kqueue
                     struct kevent newClientEvent;
+                    memset(&newClientEvent, 0, sizeof(newClientEvent));
                     newClientEvent.ident = newClientSocket;
                     newClientEvent.filter = EVFILT_READ;
                     newClientEvent.flags = EV_ADD;
                     newClientEvent.data = 0;
                     newClientEvent.udata = NULL;
+
+                    Logger::log(DEBUG, "Adding new client to kqueue");
                     if (KQUEUE_ERROR == kevent(mhKq, &newClientEvent, 1, NULL, 0, NULL))
                     {
                         Logger::log(FATAL, "Failed to add new client to kqueue");
@@ -169,29 +226,41 @@ void Server::run()
                         assert(0);
                         exit(1);
                     }
+                    Logger::log(DEBUG, "New client added to kqueue");
 
                     // create new clientData object
+                    Logger::log(DEBUG, "Creating new clientData object");
                     ClientData* newClientData = new ClientData(newClientAddress);
+                    Logger::log(DEBUG, "New clientData object created");
 
-                    // it's same as mClientDataMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
-                    mClientDataMap[newClientSocket] = newClientData;
+                    std::string ip = inet_ntoa(newClientAddress.sin_addr);
+                    Logger::log(DEBUG, "New clientData object address : " + ip);
+
+
+                    // it's same as mFdToClientDataMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
+                    Logger::log(DEBUG, "Adding new clientData object to map");
+                    mFdToClientDataMap[newClientSocket] = newClientData;
+                    Logger::log(DEBUG, "New clientData object added to map");
                 }
 
                 // if it's not server socket, it means client is trying to send message
                 else
                 {
+                    Logger::log(DEBUG, "Client is trying to send message");
                     // find the clientData
-                    ClientData* clientData = mClientDataMap[mEventVector[i].ident]; // cuz it's map, it's O(logN)
+                    Logger::log(DEBUG, "Finding clientData object");
+                    ClientData* clientData = mFdToClientDataMap[mEventVector[i].ident]; // cuz it's map, it's O(logN)
                     if (clientData == NULL)
                     {
                         Logger::log(ERROR, "ClientData not found, closing socket");
-                        std::cerr << "ClientData not found, closing socket\n";
                         close(mEventVector[i].ident);
                         assert(0);
                         continue;
                     }
+                    Logger::log(DEBUG, "ClientData object found");
 
                     // get message from client
+                    Logger::log(DEBUG, "Receiving data from client");
                     char data[MAX_MESSAGE_LENGTH];
                     int dataLength = recv(mEventVector[i].ident, data, MAX_MESSAGE_LENGTH, 0);
                     if (SOCKET_ERROR == dataLength)
@@ -203,33 +272,61 @@ void Server::run()
                         continue;
                     }
 
+                    Logger::log(INFO, clientData->getClientNickname() + " sent message : " + std::string(data, dataLength));
+
+                    Logger::log(DEBUG, "-----------------------------------------");
+                    Logger::log(DEBUG, "Data received from client");
+                    Logger::log(DEBUG, "NickName : " + clientData->getClientNickname());
+                    Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                    Logger::log(DEBUG, "Client's Port : " + std::to_string(ntohs(clientData->getClientAddress().sin_port)));
+                    Logger::log(DEBUG, "Received Data length : " + std::to_string(dataLength));
+                    Logger::log(DEBUG, "Data : " + std::string(data, dataLength));
+                    Logger::log(DEBUG, "Total Data : " + clientData->getReceivedData());
+                    Logger::log(DEBUG, "-----------------------------------------");
+
                     // if message is empty, it means client disconnected
                     if (dataLength == 0)
                     {
                         Logger::log(INFO, "Client disconnected");
+
+                        Logger::log(DEBUG, "-----------------------------------------");
+                        Logger::log(DEBUG, "NickName : " + clientData->getClientNickname());
+                        Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                        Logger::log(DEBUG, "Port : " + std::to_string(ntohs(clientData->getClientAddress().sin_port)));
+                        Logger::log(DEBUG, "-----------------------------------------");
+
                         // delete clientData object
                         delete clientData;
-                        mClientDataMap.erase(mEventVector[i].ident);
+                        mFdToClientDataMap.erase(mEventVector[i].ident);
                         close(mEventVector[i].ident);
+                        Logger::log(DEBUG, "ClientData object deleted");
                         continue;
                     }
 
                     // handle message
                     // push message to message Queue with it's clientData information
-                    mServerDataQueue.push(std::pair<SOCKET_FD, std::string>(mEventVector[i].ident, std::string(data)));
+                    Logger::log(DEBUG, "Pushing message to serverDataQueue");
+                    mServerDataQueue.push(std::pair<SOCKET_FD, std::string>(mEventVector[i].ident, std::string(data, dataLength)));
+                    
                 }
             }
         }
-        // if there is no event, we can push messages to MessageHandler
-        if (eventCount == 0)
+        // if we handled every event, we can push messages to MessageHandler
         {
+            if (time(NULL) - mServerLastPingTime > SERVER_PING_INTERVAL)
+            {
+                // TODO : ping clients and kick if not received in 2 seconds
+                mServerLastPingTime = time(NULL);
+            }
+
+
             // TODO : push messages to clients
             // we must check message's validity, hence we need to parse it, and store it in the clientData object
             while (!mServerDataQueue.empty())
             {
                 // send data to MessageHandler, and it will handle the message and request to server
                 std::pair<SOCKET_FD, std::string> &data = mServerDataQueue.front();
-                mMessageHandler.assembleDataToMessage(data, mClientDataMap);
+                assembleDataToMessage(data);
                 mServerDataQueue.pop();
             }
         }

@@ -37,17 +37,23 @@ class Logger
 {
 public:
     static void setFileLogging(const std::string& fileName);
-    static void setConsoleLogging(bool isConsoleLogging);
+    static void setConsoleLogging(const bool isConsoleLogging);
     static void closeFileLogging();
 
-    static void setLogLevelLimit(LogLevel logLevelLimit);
+    static void setLogLevelLimit(const LogLevel logLevelLimit);
 
-    static void log(LogLevel logLevel, const std::string& logMessage);
+    static void log(const LogLevel logLevel, const std::string& logMessage);
 
 private:
-    static void logToFile(const std::string& logMessage);
-    static void logToConsole(const std::string& logMessage, bool isCerr);
-    static void logEmptyString(LogLevel logLevel);
+    static void logToFile(const LogLevel logLevel, const std::string& logMessage);
+    static void logToConsole(const LogLevel logLevel, const std::string& logMessage);
+
+    // to print colorful string, starting with cool LogLevels
+    // it only prints the logLevel string and " "
+    static void logEmptyString(const LogLevel logLevel);
+
+    static const std::string& getLogLevelString(const LogLevel logLevel);
+    static const std::string& getLogLevelColor(const LogLevel logLevel);
 
 private:
     Logger();
@@ -61,4 +67,7 @@ private:
 
     static std::string      mFileName;
     static std::ofstream    logFile;
+
+    static std::string      mLogLevelString;
+    static std::string      mLogColor;
 };

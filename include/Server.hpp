@@ -12,7 +12,6 @@
 
 #include "macro.hpp"
 #include "ClientData.hpp"
-#include "MessageHandler.hpp"
 #include "AnsiColorDefines.hpp"
 #include "Logger.hpp"
 
@@ -26,6 +25,14 @@ typedef int KQUEUE_FD;
 
 class ClientData;
 class Channel;
+
+struct Message
+{
+    std::string mReceivingChannelName;
+    std::string mMessage;
+    std::string mSender;
+    std::string mReceiver;
+};
 
 class Server
 {
@@ -44,7 +51,51 @@ public:
 
 
 private:
-    MessageHandler mMessageHandler;
+    void assembleDataToMessage(std::pair<SOCKET_FD, std::string>& data)
+    {
+        std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientDataMap.find(data.first);
+        if (clientDataIter == mFdToClientDataMap.end())
+        {
+            Logger::log(ERROR, "ClientData not found\n");
+            return;
+        }
+        ClientData* clientData = (*clientDataIter).second; // cuz it's map, it's O(logN)
+
+        std::string dataString = data.second;
+        clientData->appendData(dataString);
+        if (isValidMessage(clientData->getReceivedData()))
+        {
+            Message message;
+
+            // TODO : parse the message
+            (void)message;
+        }
+        return;
+    }
+
+    bool isValidMessage(std::string& data)
+    {
+        // if the data is too small, we can't make a message
+        if (data.size() < 2)
+        {
+            return false;
+        }
+
+        // if the data is too big, we should handle error
+        if (data.size() > MAX_MESSAGE_LENGTH)
+        {
+            return false;
+        }
+
+        // if the data is not ended with \r\n, we can't make a message
+        if (data[data.size() - 2] != '\r' || data[data.size() - 1] != '\n')
+        {
+            return false;
+        }
+
+        // if the data is ended with \r\n, we can make a message
+        return true;
+    };
 
     // server network data
 private:
@@ -68,7 +119,7 @@ private:
      // server data
 private:
     // ClientData has is's channel information, so we don't need to store channel information in server
-    std::map<SOCKET_FD, ClientData*> mClientDataMap;
+    std::map<SOCKET_FD, ClientData*> mFdToClientDataMap;
     std::map<std::string, Channel*> mChannelMap;
 
     std::queue<std::pair<SOCKET_FD, std::string> > mServerDataQueue;
