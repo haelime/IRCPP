@@ -89,7 +89,7 @@ void Server::init_server(void)
     }
 
     std::stringstream ss;
-    
+
     Logger::log(INFO, "Sucessfully initiated server");
     Logger::log(INFO, "Server is listening on port " + std::to_string(mPort) + " with password " + mServerPassword);
     Logger::log(DEBUG, "Port : " + std::to_string(mPort));
@@ -105,7 +105,7 @@ void Server::run()
 
     // [2021-01-01 12:00:00]
     mServerStartTime = time(NULL);
-    
+
     Logger::log(INFO, "Server is running...");
     mServerLastPingTime = time(NULL);
 
@@ -129,7 +129,7 @@ void Server::run()
             exit(1);
         }
         // Logger::log(DEBUG, "Server got " + std::to_string(eventCount) + " events");
-        
+
         // When eventCount is almost same as mEventVector.size(), it means we need to resize mEventVector
         // [@@@@@@@@@@ 50 ]
         // WHY 50? I don't know, need to test
@@ -150,7 +150,7 @@ void Server::run()
             else
                 Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size / 1024 / 1024 / 1024) + " gigabytes");
         }
-        
+
         // handle events
         for (size_t i = 0; i < eventCount; i++)
         {
@@ -307,7 +307,7 @@ void Server::run()
                     // push message to message Queue with it's clientData information
                     Logger::log(DEBUG, "Pushing message to serverDataQueue");
                     mServerDataQueue.push(std::pair<SOCKET_FD, std::string>(mEventVector[i].ident, std::string(data, dataLength)));
-                    
+
                 }
             }
         }
@@ -325,7 +325,7 @@ void Server::run()
             while (!mServerDataQueue.empty())
             {
                 // send data to MessageHandler, and it will handle the message and request to server
-                std::pair<SOCKET_FD, std::string> &data = mServerDataQueue.front();
+                std::pair<SOCKET_FD, std::string>& data = mServerDataQueue.front();
                 assembleDataToMessage(data);
                 mServerDataQueue.pop();
             }
@@ -358,3 +358,48 @@ bool Server::checkAndSetArgv(int argc, char** argv)
     return true;
 }
 
+void Server::assembleDataToMessage(std::pair<SOCKET_FD, std::string>& data)
+{
+    std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientDataMap.find(data.first);
+    if (clientDataIter == mFdToClientDataMap.end())
+    {
+        Logger::log(ERROR, "ClientData not found\n");
+        return;
+    }
+    ClientData* clientData = (*clientDataIter).second; // cuz it's map, it's O(logN)
+
+    std::string dataString = data.second;
+    clientData->appendData(dataString);
+    if (isValidMessage(clientData->getReceivedData()))
+    {
+        Message message;
+
+        // TODO : parse the message
+        (void)message;
+    }
+    return;
+}
+
+bool Server::isValidMessage(std::string& data)
+{
+    // if the data is too small, we can't make a message
+    if (data.size() < 2)
+    {
+        return false;
+    }
+
+    // if the data is too big, we should handle error
+    if (data.size() > MAX_MESSAGE_LENGTH)
+    {
+        return false;
+    }
+
+    // if the data is not ended with \r\n, we can't make a message
+    if (data[data.size() - 2] != '\r' || data[data.size() - 1] != '\n')
+    {
+        return false;
+    }
+
+    // if the data is ended with \r\n, we can make a message
+    return true;
+};
