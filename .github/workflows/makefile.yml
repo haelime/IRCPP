@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build-test:
     runs-on: macos-latest
 
     steps:
@@ -17,6 +17,7 @@ jobs:
       run: make
 
   test-server:
+    needs: build-test
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -33,6 +34,7 @@ jobs:
 
     
   test-client:
+    needs: [build-test, test-server]
     runs-on: macos-latest
     steps:
       - name: Checkout repository
