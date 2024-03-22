@@ -17,7 +17,6 @@ jobs:
       run: make
 
   test-server:
-    needs: build-test
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -29,24 +28,25 @@ jobs:
 
       - name: Run server tests
         run: |
-            (./ircserv 6667 1234 &) && (./testClient)
+            ./ircserv 6667 1234
         timeout-minutes: 3 # 3분 타임아웃 설정
 
     
-  # test-client:
-  #   needs: [build-test, test-server]
-  #   runs-on: macos-latest
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v2
+  test-client:
+    needs: [build-test]
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-  #     - name: Set up client environment
-  #       run: |
-  #           make
-  #         # 클라이언트를 실행하기 위한 설정
-  #         # 예: 클라이언트를 빌드하고 실행하는 스크립트 실행
+      - name: Set up client environment
+        run: |
+            make
+          # 클라이언트를 실행하기 위한 설정
+          # 예: 클라이언트를 빌드하고 실행하는 스크립트 실행
 
-  #     - name: Run client tests
-  #       run: |
-  #           ./testClient
-  #         # 클라이언트 테스트 실행
+      - name: Run client tests
+        run: |
+            sleep(30)
+            ./testClient
+          # 클라이언트 테스트 실행
