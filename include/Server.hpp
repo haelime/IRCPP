@@ -47,13 +47,19 @@ public:
     bool checkAndSetArgv(int argc, char** argv); 
     void init_server(void);
     void run();
-    void stop(){};
+    void stop(){}; // TODO : implement
 
 
 private:
     void assembleDataToMessage(std::pair<SOCKET_FD, std::string>& data);
 
     bool isValidMessage(std::string& data);
+
+    // void connectClientToChannel(const std::string &channelName);
+    // void disconnectClientFromChannel(const std::string &channelName);
+    // void disconnectClientFromChannel(const std::string &channelName, const std::string &reason);
+
+
 
     // server network data
 private:
@@ -62,26 +68,24 @@ private:
     socklen_t mServerAddressLength;
 
     KQUEUE_FD mhKq;
+    // kernal monitor events
     struct kevent mEvent;
+    // client events
+    std::vector<struct kevent> mEventVector;
 
-    // key is socket, value is ClientData, which contains all the information about the client
-    // when a new client connects, a new ClientData object is created and added
-    // when a client disconnects, the ClientData object is deleted
-
-
-// arguments
-private:
+private: // arguments
     int mPort;
     std::string mServerPassword;
 
-     // server data
-private:
+     
+private: // server data
     // ClientData has is's channel information, so we don't need to store channel information in server
-    std::map<SOCKET_FD, ClientData*> mFdToClientDataMap;
-    std::map<std::string, Channel*> mChannelMap;
+
+    std::map<SOCKET_FD, ClientData*>    mFdToEveryClientDataMap;
+    std::map<std::string, Channel*>     mNameToEveryChannelMap;
 
     std::queue<std::pair<SOCKET_FD, std::string> > mServerDataQueue;
-    std::vector<struct kevent> mEventVector;
+
 
     time_t mServerStartTime;
     time_t mServerLastPingTime; // to kick if not received in 2 seconds

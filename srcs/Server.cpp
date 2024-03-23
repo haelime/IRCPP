@@ -164,10 +164,16 @@ void Server::run()
             }
             else if (mEventVector[i].flags & EV_EOF)
             {
-                Logger::log(DEBUG, "EOF occured in kqueue, closing socket");
+                Logger::log(DEBUG, "EOF occured in kqueue, closing client socket and deleting clientData object");
                 std::perror("kevent");
-                close(mServerListenSocket);
-                assert(0);
+
+                // find the clientData
+                Logger::log(DEBUG, "Finding clientData object");
+                ClientData* clientData = mFdToEveryClientDataMap[mEventVector[i].ident]; // cuz it's map, it's O(logN)
+                delete clientData;
+                mFdToEveryClientDataMap.erase(mEventVector[i].ident);
+                close(mEventVector[i].ident);
+                // assert(0);
             }
             else if (mEventVector[i].flags & EVFILT_READ)
             {
@@ -237,9 +243,9 @@ void Server::run()
                     Logger::log(DEBUG, "New clientData object address : " + ip);
 
 
-                    // it's same as mFdToClientDataMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
+                    // it's same as mFdToEveryClientDataMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     Logger::log(DEBUG, "Adding new clientData object to map");
-                    mFdToClientDataMap[newClientSocket] = newClientData;
+                    mFdToEveryClientDataMap[newClientSocket] = newClientData;
                     Logger::log(DEBUG, "New clientData object added to map");
                 }
 
@@ -249,7 +255,7 @@ void Server::run()
                     Logger::log(DEBUG, "Client is trying to send message");
                     // find the clientData
                     Logger::log(DEBUG, "Finding clientData object");
-                    ClientData* clientData = mFdToClientDataMap[mEventVector[i].ident]; // cuz it's map, it's O(logN)
+                    ClientData* clientData = mFdToEveryClientDataMap[mEventVector[i].ident]; // cuz it's map, it's O(logN)
                     if (clientData == NULL)
                     {
                         Logger::log(ERROR, "ClientData not found, closing socket");
@@ -280,6 +286,8 @@ void Server::run()
                     Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     Logger::log(DEBUG, "Client's Port : " + std::to_string(ntohs(clientData->getClientAddress().sin_port)));
                     Logger::log(DEBUG, "Received Data length : " + std::to_string(dataLength));
+
+                    // should we handle IRC protocol's \r\n? I don't know
                     Logger::log(DEBUG, "Data : " + std::string(data, dataLength));
                     Logger::log(DEBUG, "Total Data : " + clientData->getReceivedData());
                     Logger::log(DEBUG, "-----------------------------------------");
@@ -297,7 +305,7 @@ void Server::run()
 
                         // delete clientData object
                         delete clientData;
-                        mFdToClientDataMap.erase(mEventVector[i].ident);
+                        mFdToEveryClientDataMap.erase(mEventVector[i].ident);
                         close(mEventVector[i].ident);
                         Logger::log(DEBUG, "ClientData object deleted");
                         continue;
@@ -360,8 +368,8 @@ bool Server::checkAndSetArgv(int argc, char** argv)
 
 void Server::assembleDataToMessage(std::pair<SOCKET_FD, std::string>& data)
 {
-    std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientDataMap.find(data.first);
-    if (clientDataIter == mFdToClientDataMap.end())
+    std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToEveryClientDataMap.find(data.first);
+    if (clientDataIter == mFdToEveryClientDataMap.end())
     {
         Logger::log(ERROR, "ClientData not found\n");
         return;
@@ -403,3 +411,19 @@ bool Server::isValidMessage(std::string& data)
     // if the data is ended with \r\n, we can make a message
     return true;
 };
+
+
+// void Server::connectClientToChannel(const std::string &channelName)
+// {
+
+
+// }
+
+// void Server::disconnectClientFromChannel(const std::string &channelName)
+// {
+    
+// }
+// void Server::disconnectClientFromChannel(const std::string &channelName, const std::string &reason)
+// {
+
+// }
