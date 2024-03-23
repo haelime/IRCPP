@@ -171,8 +171,11 @@ void Server::run()
                 Logger::log(DEBUG, "Finding clientData object");
                 ClientData* clientData = mFdToEveryClientDataMap[mEventVector[i].ident]; // cuz it's map, it's O(logN)
                 delete clientData;
+                Logger::log(DEBUG, "ClientData object deleted");
                 mFdToEveryClientDataMap.erase(mEventVector[i].ident);
+                Logger::log(DEBUG, "Client removed from map");
                 close(mEventVector[i].ident);
+                Logger::log(DEBUG, "Client socket closed");
                 // assert(0);
             }
             else if (mEventVector[i].flags & EVFILT_READ)
