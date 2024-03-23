@@ -32,12 +32,18 @@ SERVER_PORT="6667"
         printf "%s\r\n" "${TEST[$i]}"
         sleep 1
     done
-    ) | nc $SERVER_IP $SERVER_PORT
+    ) | nc $SERVER_IP $SERVER_PORT | cat > testClient.log
+
+printf "\n"
+printf "Test Client Log\n"
+printf "======================================\n"
+cat testClient.log
+printf "======================================\n"
 
 # 서버 종료 확인
 if pgrep -x "ircserv" > /dev/null
 then
-    echo "IRC Running Successfully"
+    echo "IRC Tested Successfully"
     pkill -x ircserv
     exit 0
 else
