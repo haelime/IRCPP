@@ -35,19 +35,9 @@ public: // getter, setters
     void setLastPingTime(time_t& time) { lastPingTime = time; };
     const time_t& getLastPingTime() const { return lastPingTime; };
 
-    void addConnectedChannel(Channel* channel) { mConnectedChannels[channel->getChannelName()] = channel; };
-    void removeConnectedChannel(Channel* channel)
-    {
-        if (mConnectedChannels.find(channel->getChannelName()) != mConnectedChannels.end())
-        {
-            delete mConnectedChannels[channel->getChannelName()];
-        }
-        mConnectedChannels.erase(channel->getChannelName());
-    };
-
     std::string& getReceivedData(void) { return mReceivedData; };
 
-    const std::map <std::string, Channel*>& getConnectedChannels() { return mConnectedChannels; };
+    const std::map <std::string, Channel*>& getConnectedChannels() { return mNameToConnectedChannelMap; };
 
 public:
     // should handle error if the data is too big
@@ -60,6 +50,8 @@ public:
     {
         mReceivedData.clear();
     };
+
+    
 
 
 private:
@@ -74,7 +66,7 @@ private:
     // Client's last ping time to kick if not received in 2 seconds
     time_t lastPingTime;
 
-    std::map <std::string, Channel*> mConnectedChannels;
+    std::map <std::string, Channel*>    mNameToConnectedChannelMap;
 
 private:
     std::string mReceivedData;
