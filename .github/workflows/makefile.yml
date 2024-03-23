@@ -11,27 +11,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Set up server environment
+      - name: Set up server environment and Run server tests
         run: |
-              make
-
-      - name: Run server tests
-        run: |
-            ifconfig | grep inet
-            ./ircserv 6667 1234
-        timeout-minutes: 3 # 3분 타임아웃 설정
-
-    
-  test-client:
-    runs-on: macos-latest
-    steps:
-      - name: Attatch to server
-        uses: test-server
-
-      - name: Run client tests
-        run: |
-            sleep 10
-            ./testClient
-          # 클라이언트 테스트 실행
+              bash test.sh
