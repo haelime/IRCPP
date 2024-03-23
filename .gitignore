@@ -36,3 +36,5 @@ testClient
 
 LICENSE
 .vscode
+
+*.txt
