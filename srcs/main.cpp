@@ -26,17 +26,15 @@ int main (int argc, char **argv)
 {
     Server server;
 
-    if (!server.checkAndSetArgv(argc, argv))
-    {
-        server.printUsage(argv);
-        exit(1);
-    }
-
     Logger::setConsoleLogging(true);
     Logger::setFileLogging("log.txt");
     Logger::setLogLevelLimit(DEBUG | INFO | WARNING | ERROR | FATAL | DEFAULT);
 
-    server.init_server();
+    if (server.initServer(argc, argv) == false)
+    {
+        Logger::log(ERROR, "Server initialization failed");
+        return 1;
+    }
     server.run();
 
     // Logger::closeFileLogging();
