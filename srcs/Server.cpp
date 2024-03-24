@@ -149,7 +149,7 @@ void Server::run()
         }
 
         // Handle events
-        for (size_t i = 0; i < eventCount; i++)
+        for (int i = 0; i < eventCount; i++)
         {
             if (filteredEvents[i].flags & EV_ERROR)
             {
