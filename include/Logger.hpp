@@ -8,6 +8,26 @@
 
 #include "AnsiColorDefines.hpp"
 
+// TODO : replace to_string to ValToString
+// Integers
+template <typename T>
+std::string ValToString(const T value)
+{
+    std::ostringstream oss;
+    oss << value;
+    return oss.str();
+}
+
+// Hexadecimal
+template <typename T>
+std::string ValToStringByHex(const T value)
+{
+    std::ostringstream oss;
+    oss << std::hex << value;
+    return oss.str();
+}
+
+
 typedef unsigned int LogLevel;
 
 #define DEFAULT (1)
