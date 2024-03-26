@@ -28,7 +28,7 @@ int main (int argc, char **argv)
 
     Logger::setConsoleLogging(true);
     Logger::setFileLogging("log.txt");
-    Logger::setLogLevelLimit(DEBUG | INFO | WARNING | ERROR | FATAL | DEFAULT);
+    Logger::setLogLevel(DEBUG | INFO | WARNING | ERROR | FATAL | DEFAULT);
 
     if (server.initServer(argc, argv) == false)
     {

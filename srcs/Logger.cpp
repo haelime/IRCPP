@@ -7,7 +7,7 @@ bool             Logger::mIsConsoleLogging;
 bool             Logger::mIsCerr;
 std::string      Logger::mFileName;
 std::ofstream    Logger::logFile;
-unsigned int     Logger::mLogLevelLimit;
+LogLevel         Logger::mLogLevel;
 std::string      Logger::mLogLevelString;
 std::string      Logger::mLogColor;
 
@@ -30,9 +30,9 @@ void Logger::setConsoleLogging(const bool isConsoleLogging)
     mIsConsoleLogging = isConsoleLogging;
 }
 
-void Logger::setLogLevelLimit(const LogLevel mLogLevel)
+void Logger::setLogLevel(const LogLevel logLevel)
 {
-    Logger::mLogLevelLimit = mLogLevel;
+    Logger::mLogLevel = logLevel;
 }
 
 void Logger::closeFileLogging()
@@ -54,10 +54,10 @@ void Logger::log(const LogLevel logLevel, const std::string& logMessage)
         return;
     }
 
-    if (mIsFileLogging && (mLogLevelLimit & logLevel))
+    if (mIsFileLogging && (mLogLevel & logLevel))
         logToFile(logLevel, logMessage);
 
-    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
+    if (mIsConsoleLogging && (mLogLevel & logLevel))
         logToConsole(logLevel, logMessage);
 }
 
@@ -119,7 +119,7 @@ void Logger::logEmptyString(const LogLevel logLevel)
     const std::string logLevelString = getLogLevelString(logLevel);
     const std::string color = getLogLevelColor(logLevel);
 
-    if (mIsFileLogging && (mLogLevelLimit & logLevel))
+    if (mIsFileLogging && (mLogLevel & logLevel))
     {
         if (!logFile.is_open())
         {
@@ -130,7 +130,7 @@ void Logger::logEmptyString(const LogLevel logLevel)
         logFile << "[" << logLevelString << "] ";
     }
 
-    if (mIsConsoleLogging && (mLogLevelLimit & logLevel))
+    if (mIsConsoleLogging && (mLogLevel & logLevel))
     {
         const std::string logLevelString = getLogLevelString(logLevel);
 

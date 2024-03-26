@@ -49,7 +49,7 @@ public:
     static void setConsoleLogging(const bool isConsoleLogging);
     static void closeFileLogging();
 
-    static void setLogLevelLimit(const LogLevel logLevelLimit);
+    static void setLogLevel(const LogLevel logLevel);
 
     static void log(const LogLevel logLevel, const std::string& logMessage);
 
@@ -72,7 +72,7 @@ private:
     static bool             mIsConsoleLogging;
     static bool             mIsCerr;
 
-    static unsigned int     mLogLevelLimit;
+    static unsigned int     mLogLevel;
 
     static std::string      mFileName;
     static std::ofstream    logFile;
