@@ -32,12 +32,12 @@ SERVER_PORT="6667"
         printf "%s\r\n" "${TEST[$i]}"
         sleep 1
     done
-    ) | nc $SERVER_IP $SERVER_PORT | cat > testClient.log
+    ) | nc $SERVER_IP $SERVER_PORT | cat > IrcClient.log
 
 printf "\n"
 printf "Test Client Log\n"
 printf "======================================\n"
-cat testClient.log
+cat IrcClient.log
 printf "======================================\n"
 
 # 서버 종료 확인

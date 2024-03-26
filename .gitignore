@@ -32,10 +32,7 @@
 *.app
 
 ircserv
-testClient*
-log.txt
+*.log
 
 LICENSE
 .vscode
-
-*.txt

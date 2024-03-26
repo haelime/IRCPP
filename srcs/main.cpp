@@ -27,7 +27,7 @@ int main (int argc, char **argv)
     Server server;
 
     Logger::setConsoleLogging(true);
-    Logger::setFileLogging("log.txt");
+    Logger::setFileLogging("IrcServer.log");
     Logger::setLogLevel(DEBUG | INFO | WARNING | ERROR | FATAL | DEFAULT);
 
     if (server.initServer(argc, argv) == false)
