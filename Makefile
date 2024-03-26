@@ -12,25 +12,18 @@ SOURCE = $(SRCDIR)/main.cpp \
 		 $(SRCDIR)/Channel.cpp \
 		 $(SRCDIR)/Logger.cpp \
 
-# TESTCLIENT = $(SRCDIR)/testClient.cpp \
-# 			 $(SRCDIR)/ClientData.cpp \
-# 			 $(SRCDIR)/Logger.cpp \
-
-OBJECTS = $(SOURCE:.cpp=.o)
+OBJECTS = $(SOURCE:.cpp=.o)\
 
 HEADERS = -I./include/\
 
 
-all: $(TARGET) testClient
+all: $(TARGET)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@ $(HEADERS)
 
 $(TARGET): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(HEADERS)
-
-# testClient: $(TESTCLIENT:.cpp=.o)
-# 	$(CXX) $(CXXFLAGS) $^ -o $@ $(HEADERS)
 
 clean:
 	rm -f $(OBJECTS)

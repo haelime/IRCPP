@@ -52,13 +52,10 @@ public:
 private:
     bool setPortAndPassFromArgv(int argc, char** argv); 
 
-    void assembleDataToMessage(std::pair<SOCKET_FD, std::string>& data);
-
-    bool isValidMessage(std::string& data);
-
-    // void connectClientToChannel(const std::string &channelName);
-    // void disconnectClientFromChannel(const std::string &channelName);
-    // void disconnectClientFromChannel(const std::string &channelName, const std::string &reason);
+    // Try parse RecvMsg
+    // ClientData Does NOTHING about this recvMsg, only server will handle it.
+    bool parseRecvMsgToClientData(std::pair<SOCKET_FD, std::string>& recvMsg);
+    // Please, Add your methods below this line :)
 
 
 
