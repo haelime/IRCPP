@@ -5,7 +5,7 @@
 #include <queue> // to store messages to send
 #include <map> // to store connected clients
 
-#include "macro.hpp"
+#include "defines.hpp"
 #include "Server.hpp"
 #include "ClientData.hpp"
 

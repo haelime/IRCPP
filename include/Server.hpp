@@ -10,7 +10,7 @@
 #include <vector>
 #include <utility>
 
-#include "macro.hpp"
+#include "defines.hpp"
 #include "ClientData.hpp"
 #include "AnsiColorDefines.hpp"
 #include "Logger.hpp"
@@ -26,14 +26,6 @@ typedef int KQUEUE_FD;
 class ClientData;
 class Channel;
 
-struct Message
-{
-    std::string mReceivingChannelName;
-    std::string mMessage;
-    std::string mSender;
-    std::string mReceiver;
-};
-
 class Server
 {
 public:
@@ -41,21 +33,32 @@ public:
     ~Server() {};
 
     void printUsage(char** argv)
-    { 
+    {
         std::cerr << "Usage : " << argv[0] << " <port> <password>\n";
     }
     bool initServer(int argc, char** argv);
     void run();
-    void stop(){}; // TODO : implement
+    void stop() {}; // TODO : implement
 
 
 private:
-    bool setPortAndPassFromArgv(int argc, char** argv); 
+    bool setPortAndPassFromArgv(int argc, char** argv);
 
     // Try parse RecvMsg
     // ClientData Does NOTHING about this recvMsg, only server will handle it.
-    bool parseRecvMsgToClientData(std::pair<SOCKET_FD, std::string>& recvMsg);
-    // Please, Add your methods below this line :)
+    bool parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>& receivedRequest);
+
+    void sendParsedMessages(ClientData* clientData);
+    bool isValidParameter(char c) const;
+    bool isValidMessage(std::string &message) const;
+    bool isValidCommand(char c) const;
+
+    const std::string getIpFromClientData(ClientData *clientData) const;
+
+    void logClientData(ClientData* clientData) const;
+    void logHasStrCRLF(const std::string &str);
+
+
 
 
 
@@ -70,10 +73,11 @@ private: // server configuration
     int mPort;
     std::string mServerPassword;
 
-     
+
 private: // server data
 
     std::map<SOCKET_FD, ClientData*>    mFdToClientGlobalMap;
+    std::map<std::string, ClientData*>  mNickToClientGlobalMap;
     std::map<std::string, Channel*>     mNameToChannelGlobalMap;
 
     std::queue<std::pair<SOCKET_FD, std::string> > mClientRecvMsgQueue;
