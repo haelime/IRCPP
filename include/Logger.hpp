@@ -42,16 +42,6 @@ typedef unsigned int LogLevel;
 #define LOG_ERROR(logMessage) Logger::log(ERROR, logMessage)
 #define LOG_FATAL(logMessage) Logger::log(FATAL, logMessage)
 
-// enum LogLevel
-// {
-//     DEFAULT,
-//     DEBUG,
-//     INFO,
-//     WARNING,
-//     ERROR,
-//     FATAL
-// };
-
 class Logger
 {
 public:

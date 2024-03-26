@@ -29,9 +29,9 @@ void Logger::setConsoleLogging(const bool isConsoleLogging)
     mIsConsoleLogging = isConsoleLogging;
 }
 
-void Logger::setLogLevelLimit(const LogLevel logLevelLimit)
+void Logger::setLogLevelLimit(const LogLevel mLogLevel)
 {
-    Logger::mLogLevelLimit = logLevelLimit;
+    Logger::mLogLevelLimit = mLogLevel;
 }
 
 void Logger::closeFileLogging()
