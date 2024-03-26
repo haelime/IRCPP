@@ -9,14 +9,14 @@ bool Server::parseRecvMsgToClientData(std::pair<SOCKET_FD, std::string>& recvMsg
         Logger::log(ERROR, "ClientData not found\n");
         return false;
     }
-    ClientData* clientData = (*clientDataIter).second;
+    ClientData* clientData = clientDataIter->second;
 
     std::string dataString = recvMsg.second;
     clientData->appendData(dataString);
 
     // TODO : try Parse, if fails, return false and leave clientData
     // Inputs are like these
-    // PASS 1234
+    // PASS 1234\r\n
     // NICK client
     // USER client 0 * :realname
     // JOIN #test
