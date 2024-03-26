@@ -11,6 +11,7 @@ unsigned int     Logger::mLogLevelLimit;
 std::string      Logger::mLogLevelString;
 std::string      Logger::mLogColor;
 
+// probably we need to add (bool isFileLogging) too
 void Logger::setFileLogging(const std::string& fileName)
 {
     mIsFileLogging = true;

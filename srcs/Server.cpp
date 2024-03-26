@@ -4,9 +4,6 @@
 #include "Channel.hpp"
 #include "Logger.hpp"
 
-
-// TODO : NEED TO FIX EVERY std::to_string()
-
 bool Server::initServer(int argc, char** argv)
 {
     if (setPortAndPassFromArgv(argc, argv) == false)
@@ -270,8 +267,8 @@ void Server::run()
 
                     // Recv message from client
                     Logger::log(DEBUG, "Receiving data from client");
-                    char data[MAX_MESSAGE_LENGTH];
-                    int dataLength = recv(filteredEvents[i].ident, data, MAX_MESSAGE_LENGTH, 0);
+                    char recvMsg[MAX_MESSAGE_LENGTH];
+                    int dataLength = recv(filteredEvents[i].ident, recvMsg, MAX_MESSAGE_LENGTH, 0);
                     if (SOCKET_ERROR == dataLength)
                     {
                         Logger::log(ERROR, "Failed to receive data from client");
@@ -281,7 +278,7 @@ void Server::run()
                         continue;
                     }
 
-                    Logger::log(INFO, clientData->getClientNickname() + " sent message : " + std::string(data, dataLength));
+                    Logger::log(INFO, clientData->getClientNickname() + " sent message : " + std::string(recvMsg, dataLength));
 
                     Logger::log(DEBUG, "-----------------------------------------");
                     Logger::log(DEBUG, "Data received from client");
@@ -291,7 +288,7 @@ void Server::run()
                     Logger::log(DEBUG, "Received Data length : " + ValToString(dataLength));
 
                     // should we handle IRC protocol's \r\n? I don't know
-                    Logger::log(DEBUG, "Data : " + std::string(data, dataLength));
+                    Logger::log(DEBUG, "Data : " + std::string(recvMsg, dataLength));
                     Logger::log(DEBUG, "Total Data : " + clientData->getReceivedData());
                     Logger::log(DEBUG, "-----------------------------------------");
 
@@ -317,7 +314,7 @@ void Server::run()
                     // Handle message
                     // Push message to message Queue with it's clientData information
                     Logger::log(DEBUG, "Pushing message to serverDataQueue");
-                    mClientRecvMsgQueue.push(std::pair<SOCKET_FD, std::string>(filteredEvents[i].ident, std::string(data, dataLength)));
+                    mClientRecvMsgQueue.push(std::pair<SOCKET_FD, std::string>(filteredEvents[i].ident, std::string(recvMsg, dataLength)));
 
                 }
             }
@@ -337,9 +334,9 @@ void Server::run()
             // we must check message's validity, hence we need to parse it, and store it in the clientData object
             while (!mClientRecvMsgQueue.empty())
             {
-                // send data to MessageHandler, and it will handle the message and request to server
-                std::pair<SOCKET_FD, std::string>& data = mClientRecvMsgQueue.front();
-                assembleDataToMessage(data);
+                // send recvMsg to clientData, and server will handle the message
+                std::pair<SOCKET_FD, std::string>& recvMsg = mClientRecvMsgQueue.front();
+                parseRecvMsgToClientData(recvMsg);
                 mClientRecvMsgQueue.pop();
             }
         }
@@ -371,64 +368,30 @@ bool Server::setPortAndPassFromArgv(int argc, char** argv)
     return true;
 }
 
-void Server::assembleDataToMessage(std::pair<SOCKET_FD, std::string>& data)
+bool Server::parseRecvMsgToClientData(std::pair<SOCKET_FD, std::string>& recvMsg)
 {
-    std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(data.first);
+    std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(recvMsg.first);
     if (clientDataIter == mFdToClientGlobalMap.end())
     {
         Logger::log(ERROR, "ClientData not found\n");
-        return;
+        return false;
     }
     ClientData* clientData = (*clientDataIter).second;
 
-    std::string dataString = data.second;
+    std::string dataString = recvMsg.second;
     clientData->appendData(dataString);
-    if (isValidMessage(clientData->getReceivedData()))
-    {
-        Message message;
 
-        // TODO : parse the message
-        (void)message;
-    }
-    return;
-}
+    // TODO : try Parse, if fails, return false and leave clientData
+    // Inputs are like these
+    // PASS 1234
+    // NICK client
+    // USER client 0 * :realname
+    // JOIN #test
+    // PRIVMSG #test :Hello, server!
+    // QUIT
 
-bool Server::isValidMessage(std::string& data)
-{
-    // if the data is too small, we can't make a message
-    if (data.size() < 2)
-    {
-        return false;
-    }
+    // Enjoy!
 
-    // if the data is too big, we should handle error
-    if (data.size() > MAX_MESSAGE_LENGTH)
-    {
-        return false;
-    }
 
-    // if the data is not ended with \r\n, we can't make a message
-    if (data[data.size() - 2] != '\r' || data[data.size() - 1] != '\n')
-    {
-        return false;
-    }
-
-    // if the data is ended with \r\n, we can make a message
     return true;
-};
-
-
-// void Server::connectClientToChannel(const std::string &channelName)
-// {
-
-
-// }
-
-// void Server::disconnectClientFromChannel(const std::string &channelName)
-// {
-    
-// }
-// void Server::disconnectClientFromChannel(const std::string &channelName, const std::string &reason)
-// {
-
-// }
+}
