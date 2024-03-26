@@ -193,11 +193,11 @@ void Server::run()
 
                     Logger::log(INFO, "New client connected");
 
-                    Logger::log(DEBUG, "-----------------------------------------");
+                    Logger::log(DEBUG, "|-----------------------------------------");
                     Logger::log(DEBUG, "SocketDescriptor : " + ValToString(newClientSocket));
                     Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(newClientAddress.sin_addr)));
                     Logger::log(DEBUG, "Client's Port : " + ValToString(ntohs(newClientAddress.sin_port)));
-                    Logger::log(DEBUG, "-----------------------------------------");
+                    Logger::log(DEBUG, "-----------------------------------------|");
 
                     Logger::log(DEBUG, "Setting non-blocking socket");
                     if (fcntl(newClientSocket, F_SETFL, O_NONBLOCK) == -1)
@@ -280,7 +280,7 @@ void Server::run()
 
                     Logger::log(INFO, clientData->getClientNickname() + " sent message : " + std::string(recvMsg, dataLength));
 
-                    Logger::log(DEBUG, "-----------------------------------------");
+                    Logger::log(DEBUG, "|----------------------------------------");
                     Logger::log(DEBUG, "Data received from client");
                     Logger::log(DEBUG, "NickName : " + clientData->getClientNickname());
                     Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
@@ -290,18 +290,18 @@ void Server::run()
                     // should we handle IRC protocol's \r\n? I don't know
                     Logger::log(DEBUG, "Data : " + std::string(recvMsg, dataLength));
                     Logger::log(DEBUG, "Total Data : " + clientData->getReceivedData());
-                    Logger::log(DEBUG, "-----------------------------------------");
+                    Logger::log(DEBUG, "----------------------------------------|");
 
                     // Client disconnected
                     if (dataLength == 0)
                     {
                         Logger::log(INFO, "Client disconnected");
 
-                        Logger::log(DEBUG, "-----------------------------------------");
+                        Logger::log(DEBUG, "|----------------------------------------");
                         Logger::log(DEBUG, "NickName : " + clientData->getClientNickname());
                         Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         Logger::log(DEBUG, "Port : " + ValToString(ntohs(clientData->getClientAddress().sin_port)));
-                        Logger::log(DEBUG, "-----------------------------------------");
+                        Logger::log(DEBUG, "-----------------------------------------|");
 
                         // Delete clientData object
                         delete clientData;
