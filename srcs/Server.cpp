@@ -4,6 +4,7 @@
 #include "Channel.hpp"
 #include "Logger.hpp"
 
+
 // TODO : NEED TO FIX EVERY std::to_string()
 
 bool Server::initServer(int argc, char** argv)
@@ -90,8 +91,8 @@ bool Server::initServer(int argc, char** argv)
     }
 
     Logger::log(INFO, "Sucessfully initiated server");
-    Logger::log(INFO, "Server is listening on port " + std::to_string(mPort) + " with password " + mServerPassword);
-    Logger::log(DEBUG, "Port : " + std::to_string(mPort));
+    Logger::log(INFO, "Server is listening on port " + ValToString(mPort) + " with password " + mServerPassword);
+    Logger::log(DEBUG, "Port : " + ValToString(mPort));
     Logger::log(DEBUG, "Password : " + mServerPassword);
 
     return true;
@@ -127,7 +128,7 @@ void Server::run()
             assert(0);
             exit(1);
         }
-        // Logger::log(DEBUG, "Server got " + std::to_string(eventCount) + " events");
+        // Logger::log(DEBUG, "Server got " + ValToString(eventCount) + " events");
 
         // Resize the buffer when the events are occupying most of the buffer.
         const size_t filteredEventsResizeThreshold = 50;
@@ -139,13 +140,13 @@ void Server::run()
             // 1. sizeof(struct kevent) * mEventVector.size()
             const size_t size = sizeof(struct kevent) * filteredEvents.size();
             if (size < 1024)
-                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size) + " bytes");
+                Logger::log(WARNING, "Event vector resized, Current size : " + ValToString(size) + " bytes");
             else if (size < 1024 * 1024)
-                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size / 1024) + " kilobytes");
+                Logger::log(WARNING, "Event vector resized, Current size : " + ValToString(size / 1024) + " kilobytes");
             else if (size < 1024 * 1024 * 1024)
-                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size / 1024 / 1024) + " megabytes");
+                Logger::log(WARNING, "Event vector resized, Current size : " + ValToString(size / 1024 / 1024) + " megabytes");
             else
-                Logger::log(WARNING, "Event vector resized, Current size : " + std::to_string(size / 1024 / 1024 / 1024) + " gigabytes");
+                Logger::log(WARNING, "Event vector resized, Current size : " + ValToString(size / 1024 / 1024 / 1024) + " gigabytes");
         }
 
         // Handle events
@@ -196,9 +197,9 @@ void Server::run()
                     Logger::log(INFO, "New client connected");
 
                     Logger::log(DEBUG, "-----------------------------------------");
-                    Logger::log(DEBUG, "SocketDescriptor : " + std::to_string(newClientSocket));
+                    Logger::log(DEBUG, "SocketDescriptor : " + ValToString(newClientSocket));
                     Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(newClientAddress.sin_addr)));
-                    Logger::log(DEBUG, "Client's Port : " + std::to_string(ntohs(newClientAddress.sin_port)));
+                    Logger::log(DEBUG, "Client's Port : " + ValToString(ntohs(newClientAddress.sin_port)));
                     Logger::log(DEBUG, "-----------------------------------------");
 
                     Logger::log(DEBUG, "Setting non-blocking socket");
@@ -286,8 +287,8 @@ void Server::run()
                     Logger::log(DEBUG, "Data received from client");
                     Logger::log(DEBUG, "NickName : " + clientData->getClientNickname());
                     Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
-                    Logger::log(DEBUG, "Client's Port : " + std::to_string(ntohs(clientData->getClientAddress().sin_port)));
-                    Logger::log(DEBUG, "Received Data length : " + std::to_string(dataLength));
+                    Logger::log(DEBUG, "Client's Port : " + ValToString(ntohs(clientData->getClientAddress().sin_port)));
+                    Logger::log(DEBUG, "Received Data length : " + ValToString(dataLength));
 
                     // should we handle IRC protocol's \r\n? I don't know
                     Logger::log(DEBUG, "Data : " + std::string(data, dataLength));
@@ -302,7 +303,7 @@ void Server::run()
                         Logger::log(DEBUG, "-----------------------------------------");
                         Logger::log(DEBUG, "NickName : " + clientData->getClientNickname());
                         Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
-                        Logger::log(DEBUG, "Port : " + std::to_string(ntohs(clientData->getClientAddress().sin_port)));
+                        Logger::log(DEBUG, "Port : " + ValToString(ntohs(clientData->getClientAddress().sin_port)));
                         Logger::log(DEBUG, "-----------------------------------------");
 
                         // Delete clientData object
