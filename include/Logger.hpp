@@ -8,7 +8,6 @@
 
 #include "AnsiColorDefines.hpp"
 
-// TODO : replace to_string to ValToString
 // Integers
 template <typename T>
 std::string ValToString(const T value)
