@@ -303,7 +303,7 @@ void Server::run()
                     // Handle message
                     // Push message to message Queue with it's clientData information
                     Logger::log(DEBUG, "Pushing message to serverDataQueue");
-                    mClientRecvMsgQueue.push(std::pair<SOCKET_FD, std::string>(filteredEvents[i].ident, std::string(recvMsg, recvMsgLength)));
+                    Server::mClientRecvMsgQueue.push(std::pair<SOCKET_FD, std::string>(filteredEvents[i].ident, std::string(recvMsg, recvMsgLength)));
                     std::string recvMsgStr(recvMsg, recvMsgLength);
                     clientData->appendReceivedString(recvMsgStr);
 
@@ -872,6 +872,7 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
                     return false;
                 }
             }
+            // TODO : consider emplace_back
             message.mParams.push_back(tmpParam);
             break;
         }
