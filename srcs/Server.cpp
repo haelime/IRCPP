@@ -645,13 +645,14 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     logHasStrCRLF(str);
 
     std::string target ("\r\n");
-    std:size_t pos = str.find(target);
+    std::size_t pos = str.find(target);
     if (pos == std::string::npos)
     {
         Logger::log(ERROR, "Message is not completed yet");
         assert(false);
         return false;
     }
+
     
 
 
@@ -734,7 +735,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     // str = str.substr(commandIter - str.begin() + 1);
 
     std::string commandStr;
-    if (std::getline(ss, commandStr, ' '))
+    // if (std::getline(ss, commandStr, ' '))
     {
         for (size_t i = 0; i < commandStr.length(); i++)
         {
@@ -799,7 +800,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
 
     // parse params
     std::string params;
-    std::getline(ss, params, '\r');
+    // std::getline(ss, params, '\r');
     // check params and push it to message's params vector
     std::string::iterator paramsIter = params.begin();
     while (paramsIter != params.end())
