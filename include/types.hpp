@@ -26,5 +26,6 @@ struct Message
     std::string mPrefix;
 
     Command mCommand;
+    // TODO : check parameter's max size
     std::vector <std::string> mParams;
 };
