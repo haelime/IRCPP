@@ -306,7 +306,7 @@ void Server::run()
                     // Handle message
                     // Push message to message Queue with it's clientData information
                     Logger::log(DEBUG, "Pushing message to serverDataQueue");
-                    Server::mClientRecvMsgQueue.push(std::pair<SOCKET_FD, std::string>(filteredEvents[i].ident, std::string(recvMsg, recvMsgLength)));
+                    Server::mClientRecvProcessQueue.push(filteredEvents[i].ident);
                     std::string recvMsgStr(recvMsg, recvMsgLength);
                     clientData->appendReceivedString(recvMsgStr);
 
@@ -326,16 +326,16 @@ void Server::run()
 
             // TODO : push messages to clients
             // we must check message's validity, hence we need to parse it, and store it in the clientData object
-            while (!mClientRecvMsgQueue.empty())
+            while (!mClientRecvProcessQueue.empty())
             {
                 // send receivedRequest to clientData, and server will handle the message
-                std::pair<SOCKET_FD, std::string>& receivedRequest = mClientRecvMsgQueue.front();
+                SOCKET_FD client = mClientRecvProcessQueue.front();
                 Logger::log(DEBUG, "Parsing received message to clientData object");
                 
-                if (parseReceivedRequestToClientData(receivedRequest) == true)
+                if (parseReceivedRequestFromClientData(client) == true)
                 {
                     Logger::log(DEBUG, "Message parsed successfully");
-                    SOCKET_FD clientFD = receivedRequest.first;
+                    SOCKET_FD clientFD = client;
                     // This logic Takes O(log N), probably can optimize it
                     std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
                     ClientData* clientData = (*clientDataIter).second;
@@ -343,7 +343,7 @@ void Server::run()
                     Logger::log(DEBUG, "Sending parsed message to clientData object");
                     sendParsedMessages(clientData);
                 }
-                mClientRecvMsgQueue.pop();
+                mClientRecvProcessQueue.pop();
             }
         }
     }
@@ -610,10 +610,9 @@ bool Server::setPortAndPassFromArgv(int argc, char** argv)
     return true;
 }
 
-bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>& receivedRequest)
+bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
 {
-    SOCKET_FD clientFD = receivedRequest.first;
-    std::string receivedString = receivedRequest.second;
+    SOCKET_FD clientFD = client;
 
     std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
     if (clientDataIter == mFdToClientGlobalMap.end())
@@ -624,7 +623,6 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
     }
     ClientData* clientData = (*clientDataIter).second;
 
-    Logger::log(INFO, "Received message from " + clientData->getIp() + " : " + receivedString);
 
     // should erase and setReceivedString() if the message has been parsed
     std::string originStr = clientData->getReceivedString();

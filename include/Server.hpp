@@ -46,7 +46,7 @@ private:
 
     // Try parse RecvMsg
     // ClientData Does NOTHING about this recvMsg, only server will handle it.
-    bool parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>& receivedRequest);
+    bool parseReceivedRequestFromClientData(SOCKET_FD client);
 
     void sendParsedMessages(ClientData* clientData);
     bool isValidParameter(char c) const;
@@ -80,7 +80,7 @@ private: // server data
     std::map<std::string, ClientData*>  mNickToClientGlobalMap;
     std::map<std::string, Channel*>     mNameToChannelGlobalMap;
 
-    std::queue<std::pair<SOCKET_FD, std::string> > mClientRecvMsgQueue;
+    std::queue<SOCKET_FD> mClientRecvProcessQueue;
 
     time_t mServerStartTime;
     time_t mServerLastPingTime; //< to kick if not received in 2 seconds
