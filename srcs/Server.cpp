@@ -166,6 +166,7 @@ void Server::run()
 
                 // Find the clientData
                 Logger::log(DEBUG, "Finding clientData object");
+                // TODO : change to .find() instead of operator[] for preventing creating new ClientData object when not found
                 ClientData* clientData = mFdToClientGlobalMap[filteredEvents[i].ident]; // cuz it's map, it's O(logN)
                 delete clientData;
                 Logger::log(DEBUG, "ClientData object deleted");
@@ -195,6 +196,7 @@ void Server::run()
 
                     Logger::log(INFO, "New client connected");
 
+                    // TODO : change log format
                     Logger::log(DEBUG, "|-----------------------------------------");
                     Logger::log(DEBUG, "SocketDescriptor : " + ValToString(newClientSocket));
                     Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(newClientAddress.sin_addr)));
@@ -246,6 +248,7 @@ void Server::run()
 
                     // it's same as mFdToClientGlobalMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     Logger::log(DEBUG, "Adding new clientData object to map");
+                    mFdToClientGlobalMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     mFdToClientGlobalMap[newClientSocket] = newClientData;
                     Logger::log(DEBUG, "New clientData object added to map");
                 }
