@@ -625,8 +625,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
 
 
     // should erase and setReceivedString() if the message has been parsed
-    std::string originStr = clientData->getReceivedString();
-    std::string str = originStr;
+    std::string str = clientData->getReceivedString();
 
     Logger :: log (DEBUG, "Trying to parse message with : \"" + str + "\"");
     if (str.length() < 2)
@@ -641,77 +640,23 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         assert(false);
         return false;
     }
-    std::stringstream ss;
-
-    ss << str;
-    if (ss.fail())
-    {
-        Logger::log(WARNING, "Failed to parse message");
-        assert(false);
-        return false;
-    }
-    std::string rawMessage;
-    // check if the message is completed and cut the message by CR LF
-    if (!getline(ss, rawMessage, '\r'))
-    {
-        Logger::log(WARNING, "Message is not completed yet");
-        assert(false);
-        return false;
-    }
-    if (ss.fail())
-    {
-        Logger::log(WARNING, "Failed to parse message");
-        assert(false);
-        return false;
-    }
-    // rawMessage
 
     Logger::log(DEBUG, "Printing str : ");
     logHasStrCRLF(str);
-    Logger::log(DEBUG, "Printing rawMessage : ");
-    logHasStrCRLF(rawMessage);
 
-
-    // old logic
-    // size_t crIndex = str.find('\r');
-    // size_t crIndex = 0;
-    // for (int i = 0; i < int(str.length()) - 1; i++)
-    // {
-    //     if (str[i] == '\r' && str[i + 1] == '\n')
-    //     {
-    //         crIndex = i;
-    //         break;
-    //     }
-    // }
-    // if (crIndex == str.npos) //< not found
-    // {
-    //     Logger::log(WARNING, "Message is not completed yet");
-    //     return false;
-    // }
-    // std::string::iterator strIter = str.begin() + crIndex;
-    // strIter++;
-    // if (strIter == str.end())
-    // {
-    //     Logger::log(WARNING, "Message is not completed yet");
-    //     return false;
-    // }
-    // if (*strIter != '\n')
-    // {
-    //     Logger::log(WARNING, "Invalid message");
-    //     return false;
-    // }
-
-    Logger::log(DEBUG, "Raw message : " + rawMessage);
-    if (isValidMessage(rawMessage) == false)
+    std::string target ("\r\n");
+    std:size_t pos = str.find(target);
+    if (pos == std::string::npos)
     {
-        Logger::log(WARNING, "Invalid message");
+        Logger::log(ERROR, "Message is not completed yet");
         assert(false);
         return false;
     }
+    
 
-    // remove the rawMessage from receivedString
 
-    // parse the rawMessage
+
+
     Message message;
 
     // parse prefix
@@ -719,20 +664,20 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     // <message>  ::= [':' <prefix> <SPACE> ] <command> <params> <crlf>
     // <prefix>   ::= <servername> | <nick> [ '!' <user> ] [ '@' <host> ]
 
-    if (rawMessage[0] == ':')
+    if (str[0] == ':')
     {
-        size_t spaceIndex = rawMessage.find(' ');
-        if (spaceIndex == rawMessage.npos)
+        size_t spaceIndex = str.find(' ');
+        if (spaceIndex == str.npos)
         {
             Logger::log(ERROR, "Invalid message");
             assert(false);
             return false;
         }
-        std::string::iterator prefixIter = rawMessage.begin() + spaceIndex;
+        std::string::iterator prefixIter = str.begin() + spaceIndex;
 
         // cut the prefix
-        std::string tmpPrefix = rawMessage.substr(1, prefixIter - rawMessage.begin());
-        rawMessage = rawMessage.substr(prefixIter - rawMessage.begin() + 1);
+        std::string tmpPrefix = str.substr(1, prefixIter - str.begin());
+        str = str.substr(prefixIter - str.begin() + 1);
 
         if (mNickToClientGlobalMap.find(tmpPrefix) != mNickToClientGlobalMap.end())
         {
@@ -775,18 +720,18 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     // · l: Set/remove the user limit to channel
     // parse command
 
-    // size_t spaceIndex = rawMessage.find(' ');
-    // if (spaceIndex == rawMessage.npos)
+    // size_t spaceIndex = str.find(' ');
+    // if (spaceIndex == str.npos)
     // {
     //     Logger::log(ERROR, "Invalid message");
     //     assert(false);
     //     return false;
     // }
-    // std::string::iterator commandIter = rawMessage.begin() + spaceIndex;
+    // std::string::iterator commandIter = str.begin() + spaceIndex;
 
     // // message is already cut by CR LF, so we start from 0
-    // std::string commandStr = rawMessage.substr(0, commandIter - rawMessage.begin());
-    // rawMessage = rawMessage.substr(commandIter - rawMessage.begin() + 1);
+    // std::string commandStr = str.substr(0, commandIter - str.begin());
+    // str = str.substr(commandIter - str.begin() + 1);
 
     std::string commandStr;
     if (std::getline(ss, commandStr, ' '))
@@ -953,17 +898,17 @@ void Server::logHasStrCRLF(const std::string &str)
     {
         if (str[i] == '\r')
         {
-            Logger::log(DEBUG, str + "has CR");
+            Logger::log(DEBUG, str + " has CR");
             found = 1;
         }
         else if (str[i] == '\n')
         {
-            Logger::log(DEBUG, str + "has LF");
+            Logger::log(DEBUG, str + " has LF");
             found = 1;
         }
     }
     if (!found)
-        Logger::log(DEBUG, str + "has no CRLF");
+        Logger::log(DEBUG, str + " has no CRLF");
 }
 
 bool Server::isValidCommand(char c) const
