@@ -665,6 +665,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     // <message>  ::= [':' <prefix> <SPACE> ] <command> <params> <crlf>
     // <prefix>   ::= <servername> | <nick> [ '!' <user> ] [ '@' <host> ]
 
+    // DON'T BELIVE THIS LOGIC
     if (str[0] == ':')
     {
         size_t spaceIndex = str.find(' ');
@@ -734,6 +735,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     // std::string commandStr = str.substr(0, commandIter - str.begin());
     // str = str.substr(commandIter - str.begin() + 1);
 
+    // DON'T BELIVE THIS LOGIC
     std::string commandStr;
     // if (std::getline(ss, commandStr, ' '))
     {
@@ -798,6 +800,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
 
     message.mCommand = command;
 
+    // DON'T BELIVE THIS LOGIC
     // parse params
     std::string params;
     // std::getline(ss, params, '\r');
@@ -837,6 +840,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         paramsIter = nextParamsIter + 1;
     }
 
+    // CONSIDER MULTIPLE MESSAGES
     clientData->getParsedMessageQueue().push(message);
 
     return true;
