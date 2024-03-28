@@ -316,6 +316,8 @@ void Server::run()
             }
             else if (filteredEvents[i].flags & EVFILT_WRITE)
             {
+                // TODO : if send is done successfully, remove EVFILT_WRITE event
+
                 // Server can send message to client
                 Logger::log(DEBUG, "Server sending message to client");
                 Logger::log(DEBUG, "Finding clientData object");
@@ -328,7 +330,6 @@ void Server::run()
 
 
                 // Find the clientData
-
 
             }
         }
@@ -364,7 +365,7 @@ void Server::run()
                     memset(&newSendEvent, 0, sizeof(newSendEvent));
                     newSendEvent.ident = newClientSocket;
                     newSendEvent.filter = EVFILT_WRITE;
-                    newSendEvent.flags = EV_ADD | EV_ENABLE;
+                    newSendEvent.flags = EV_ENABLE;
                     newSendEvent.data = 0;
                     newSendEvent.udata = NULL;
                     kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL);
@@ -374,6 +375,7 @@ void Server::run()
                 }
                 mClientRecvProcessQueue.pop();
             }
+
         }
     }
 }
@@ -390,11 +392,16 @@ void Server::enqueueParsedMessages(ClientData* clientData)
         Message errMessage;
         std::vector <std::string> channelNames;
         std::vector <std::string> channelKeys;
-        std::map<std::string, Channel*>::const_iterator channelIter = mNameToChannelGlobalMap.find(message.mMessageVector[0]);
+        std::map<std::string, Channel*>::iterator globalChannelIter;
+        size_t posStart;
+        size_t posEnd;
         // for cross-validation, i implemented simple parse check here
         // if parse part is done, gonna cross-check with the clientData object
         switch (message.mCommand)
         {
+            case NONE:
+
+                break;
         case PASS:
             // The PASS command is used to set a 'connection password'.  The
             // optional password can and MUST be set before any attempt to register
@@ -452,8 +459,8 @@ void Server::enqueueParsedMessages(ClientData* clientData)
                 Logger::log(DEBUG, "Client disconnected");
                 break;
             }
-
             break;
+
         case NICK:
 
             //  If the server recieves an identical NICK from a client which is
@@ -478,9 +485,11 @@ void Server::enqueueParsedMessages(ClientData* clientData)
                 errMessage.mMessageVector.push_back("Nickname collision");
                 clientData->getServerToClientSendQueue().push(errMessage);    
             }
+
             clientData->setClientNickname(message.mMessageVector[0]);
             Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + message.mMessageVector[0]);
             break;
+
         case USER:
             //    The USER message is used at the beginning of connection to specify
             //    the username, hostname, servername and realname of s new user.  It is
@@ -576,35 +585,86 @@ void Server::enqueueParsedMessages(ClientData* clientData)
 
             // :WiZ JOIN #Twilight_zone        ; JOIN message from WiZ
 
-
-
-
-            for (size_t i = 1; i < message.mMessageVector.size(); i++)
+            // channels are separated by ','
+            // add channel to clientData object
+            posStart = 0;
+            posEnd = message.mMessageVector[0].find(',');
+            while (message.mMessageVector[0].find(',') != std::string::npos)
             {
-                if (i == 0) // < PASS
-                    continue;
-                if (message.mMessageVector[i][0] == '#')
-                    channelNames.push_back(message.mMessageVector[i]);
-                else if (message.mMessageVector[i][0] == '&')
-                    channelNames.push_back(message.mMessageVector[i]);
+                channelNames.push_back(message.mMessageVector[0].substr(posStart, posEnd));
+                posStart = posEnd + 1;
+                posEnd = message.mMessageVector[0].find(',', posStart);
+            }
+
+            // add keys to clientData object
+            posStart = 0;
+            posEnd = message.mMessageVector[1].find(',');
+            while (message.mMessageVector[1].find(',') != std::string::npos)
+            {
+                channelKeys.push_back(message.mMessageVector[1].substr(posStart, posEnd));
+                posStart = posEnd + 1;
+                posEnd = message.mMessageVector[1].find(',', posStart);
+            }
+
+
+            for (size_t i = 0; i < channelNames.size(); i++)
+            {
+                if (channelKeys.size() > i && channelKeys[i].length() > 0)
+                {
+                    Logger::log(DEBUG, "Channel " + channelNames[i] + " has key " + channelKeys[i]);
+                }
                 else
-                    channelKeys.push_back(message.mMessageVector[i]);
+                {
+                    Logger::log(DEBUG, "Channel " + channelNames[i] + " has no key");
+                }
+
+                globalChannelIter = mNameToChannelGlobalMap.find(message.mMessageVector[0]);
+                if (globalChannelIter == mNameToChannelGlobalMap.end())
+                {
+                    Logger::log(DEBUG, "Channel not found, creating new channel");
+                    Channel* newChannel = new Channel(channelNames[i]);
+                    mNameToChannelGlobalMap[channelNames[i]] = newChannel;
+                    newChannel->setOperatorClient(clientData);
+                    if (channelKeys.size() > i)
+                    {
+                        newChannel->setPassword(channelKeys[i]);
+                        connectClientDataWithChannel(clientData, newChannel, channelKeys[i]);
+                        Logger::log(DEBUG, "Channel created with password");
+                        continue;
+                    }
+                    connectClientDataWithChannel(clientData, newChannel);
+                    Logger::log(DEBUG, "Channel created");
+                }
+                else 
+                {
+                    Channel* channel = (*globalChannelIter).second;
+                    if (channel->getPassword().length() > 0)
+                    {
+                        if (channelKeys.size() > i && channelKeys[i] == channel->getPassword())
+                        {
+                            connectClientDataWithChannel(clientData, channel, channelKeys[i]);
+                            Logger::log(DEBUG, "Channel joined with password");
+                            continue;
+                        }
+                        else
+                        {
+                            Logger::log(ERROR, "Invalid password, sending ERR_BADCHANNELKEY");
+                            errMessage.mMessageVector.push_back(ERR_BADCHANNELKEY);
+                            errMessage.mMessageVector.push_back("Invalid password");
+                            clientData->getServerToClientSendQueue().push(errMessage);
+                            continue;
+                        }
+                    }
+                    connectClientDataWithChannel(clientData, channel);
+                    Logger::log(DEBUG, "Channel joined");
+                }
             }
             
-            if (channelIter == mNameToChannelGlobalMap.end())
-            {
-                Logger::log(DEBUG, "Channel not found, creating new channel");
-                Channel* newChannel = new Channel(message.mMessageVector[0]);
-                mNameToChannelGlobalMap[message.mMessageVector[0]] = newChannel;
-                newChannel->setOperatorClient(clientData);
-                // newChannel.
-                Logger::log(DEBUG, "Channel created");
-            }
-
-
-
             break;
         case PART:
+            // Parameters: <channel>{,<channel>}
+            // The PART command causes the user sending the message to be removed from the
+
 
             break;
         case PRIVMSG:
@@ -974,4 +1034,22 @@ bool Server::isValidCommand(char c) const
     if (isalnum(c))
         return true;
     return false;
+}
+
+void Server::connectClientDataWithChannel(ClientData *clientData, Channel *channel)
+{
+    // add clientData to channel
+    channel->getNickToClientDataMap().insert(std::pair<std::string, ClientData*>(clientData->getClientNickname(), clientData));
+    // add channel to clientData
+    clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
+}
+
+void Server::connectClientDataWithChannel(ClientData *clientData, Channel *channel, const std::string &password)
+{
+    if (channel->getPassword() == password)
+    {
+        channel->getNickToClientDataMap().insert(std::pair<std::string, ClientData*>(clientData->getClientNickname(), clientData));
+        // add channel to clientData
+        clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
+    }
 }

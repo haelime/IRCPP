@@ -58,7 +58,8 @@ private:
     void logClientData(ClientData* clientData) const;
     void logHasStrCRLF(const std::string &str);
 
-
+    void connectClientDataWithChannel(ClientData *clientData, Channel *channel);
+    void connectClientDataWithChannel(ClientData *clientData, Channel *channel, const std::string &password);
 
 
 
