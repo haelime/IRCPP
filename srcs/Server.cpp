@@ -166,6 +166,7 @@ void Server::run()
 
                 // Find the clientData
                 Logger::log(DEBUG, "Finding clientData object");
+                // TODO : change to .find() instead of operator[] for preventing creating new ClientData object when not found
                 ClientData* clientData = mFdToClientGlobalMap[filteredEvents[i].ident]; // cuz it's map, it's O(logN)
                 delete clientData;
                 Logger::log(DEBUG, "ClientData object deleted");
@@ -195,6 +196,7 @@ void Server::run()
 
                     Logger::log(INFO, "New client connected");
 
+                    // TODO : change log format
                     Logger::log(DEBUG, "|-----------------------------------------");
                     Logger::log(DEBUG, "SocketDescriptor : " + ValToString(newClientSocket));
                     Logger::log(DEBUG, "IP : " + std::string(inet_ntoa(newClientAddress.sin_addr)));
@@ -248,6 +250,7 @@ void Server::run()
 
                     // it's same as mFdToClientGlobalMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     Logger::log(DEBUG, "Adding new clientData object to map");
+                    mFdToClientGlobalMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     mFdToClientGlobalMap[newClientSocket] = newClientData;
                     Logger::log(DEBUG, "New clientData object added to map");
                 }
@@ -305,7 +308,7 @@ void Server::run()
                     // Handle message
                     // Push message to message Queue with it's clientData information
                     Logger::log(DEBUG, "Pushing message to serverDataQueue");
-                    mClientRecvMsgQueue.push(std::pair<SOCKET_FD, std::string>(filteredEvents[i].ident, std::string(recvMsg, recvMsgLength)));
+                    Server::mClientRecvProcessQueue.push(filteredEvents[i].ident);
                     std::string recvMsgStr(recvMsg, recvMsgLength);
                     clientData->appendReceivedString(recvMsgStr);
 
@@ -343,16 +346,16 @@ void Server::run()
 
             // TODO : push messages to clients
             // we must check message's validity, hence we need to parse it, and store it in the clientData object
-            while (!mClientRecvMsgQueue.empty())
+            while (!mClientRecvProcessQueue.empty())
             {
                 // send receivedRequest to clientData, and server will handle the message
-                std::pair<SOCKET_FD, std::string>& receivedRequest = mClientRecvMsgQueue.front();
+                SOCKET_FD client = mClientRecvProcessQueue.front();
                 Logger::log(DEBUG, "Parsing received message to clientData object");
                 
-                if (parseReceivedRequestToClientData(receivedRequest) == true)
+                if (parseReceivedRequestFromClientData(client) == true)
                 {
                     Logger::log(DEBUG, "Message parsed successfully");
-                    SOCKET_FD clientFD = receivedRequest.first;
+                    SOCKET_FD clientFD = client;
                     // This logic Takes O(log N), probably can optimize it
                     std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
                     ClientData* clientData = (*clientDataIter).second;
@@ -369,7 +372,7 @@ void Server::run()
                     Logger::log(DEBUG, "Sending parsed message to clientData object");
                     enqueueParsedMessages(clientData);
                 }
-                mClientRecvMsgQueue.pop();
+                mClientRecvProcessQueue.pop();
             }
         }
     }
@@ -664,10 +667,9 @@ bool Server::setPortAndPassFromArgv(int argc, char** argv)
     return true;
 }
 
-bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>& receivedRequest)
+bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
 {
-    SOCKET_FD clientFD = receivedRequest.first;
-    std::string receivedString = receivedRequest.second;
+    SOCKET_FD clientFD = client;
 
     std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
     if (clientDataIter == mFdToClientGlobalMap.end())
@@ -678,11 +680,9 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
     }
     ClientData* clientData = (*clientDataIter).second;
 
-    Logger::log(INFO, "Received message from " + clientData->getIp() + " : " + receivedString);
 
     // should erase and setReceivedString() if the message has been parsed
-    std::string originStr = clientData->getReceivedString();
-    std::string str = originStr;
+    std::string str = clientData->getReceivedString();
 
     Logger :: log (DEBUG, "Trying to parse message with : \"" + str + "\"");
     if (str.length() < 2)
@@ -697,77 +697,24 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
         assert(false);
         return false;
     }
-    std::stringstream ss;
-
-    ss << str;
-    if (ss.fail())
-    {
-        Logger::log(WARNING, "Failed to parse message");
-        assert(false);
-        return false;
-    }
-    std::string rawMessage;
-    // check if the message is completed and cut the message by CR LF
-    if (!getline(ss, rawMessage, '\r'))
-    {
-        Logger::log(WARNING, "Message is not completed yet");
-        assert(false);
-        return false;
-    }
-    if (ss.fail())
-    {
-        Logger::log(WARNING, "Failed to parse message");
-        assert(false);
-        return false;
-    }
-    // rawMessage
 
     Logger::log(DEBUG, "Printing str : ");
     logHasStrCRLF(str);
-    Logger::log(DEBUG, "Printing rawMessage : ");
-    logHasStrCRLF(rawMessage);
 
-
-    // old logic
-    // size_t crIndex = str.find('\r');
-    // size_t crIndex = 0;
-    // for (int i = 0; i < int(str.length()) - 1; i++)
-    // {
-    //     if (str[i] == '\r' && str[i + 1] == '\n')
-    //     {
-    //         crIndex = i;
-    //         break;
-    //     }
-    // }
-    // if (crIndex == str.npos) //< not found
-    // {
-    //     Logger::log(WARNING, "Message is not completed yet");
-    //     return false;
-    // }
-    // std::string::iterator strIter = str.begin() + crIndex;
-    // strIter++;
-    // if (strIter == str.end())
-    // {
-    //     Logger::log(WARNING, "Message is not completed yet");
-    //     return false;
-    // }
-    // if (*strIter != '\n')
-    // {
-    //     Logger::log(WARNING, "Invalid message");
-    //     return false;
-    // }
-
-    Logger::log(DEBUG, "Raw message : " + rawMessage);
-    if (isValidMessage(rawMessage) == false)
+    std::string target ("\r\n");
+    std::size_t pos = str.find(target);
+    if (pos == std::string::npos)
     {
-        Logger::log(WARNING, "Invalid message");
+        Logger::log(ERROR, "Message is not completed yet");
         assert(false);
         return false;
     }
 
-    // remove the rawMessage from receivedString
+    
 
-    // parse the rawMessage
+
+
+
     Message message;
 
     // parse prefix
@@ -775,20 +722,21 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
     // <message>  ::= [':' <prefix> <SPACE> ] <command> <params> <crlf>
     // <prefix>   ::= <servername> | <nick> [ '!' <user> ] [ '@' <host> ]
 
-    if (rawMessage[0] == ':')
+    // DON'T BELIVE THIS LOGIC
+    if (str[0] == ':')
     {
-        size_t spaceIndex = rawMessage.find(' ');
-        if (spaceIndex == rawMessage.npos)
+        size_t spaceIndex = str.find(' ');
+        if (spaceIndex == str.npos)
         {
             Logger::log(ERROR, "Invalid message");
             assert(false);
             return false;
         }
-        std::string::iterator prefixIter = rawMessage.begin() + spaceIndex;
+        std::string::iterator prefixIter = str.begin() + spaceIndex;
 
         // cut the prefix
-        std::string tmpPrefix = rawMessage.substr(1, prefixIter - rawMessage.begin());
-        rawMessage = rawMessage.substr(prefixIter - rawMessage.begin() + 1);
+        std::string tmpPrefix = str.substr(1, prefixIter - str.begin());
+        str = str.substr(prefixIter - str.begin() + 1);
 
         if (mNickToClientGlobalMap.find(tmpPrefix) != mNickToClientGlobalMap.end())
         {
@@ -831,21 +779,22 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
     // · l: Set/remove the user limit to channel
     // parse command
 
-    // size_t spaceIndex = rawMessage.find(' ');
-    // if (spaceIndex == rawMessage.npos)
+    // size_t spaceIndex = str.find(' ');
+    // if (spaceIndex == str.npos)
     // {
     //     Logger::log(ERROR, "Invalid message");
     //     assert(false);
     //     return false;
     // }
-    // std::string::iterator commandIter = rawMessage.begin() + spaceIndex;
+    // std::string::iterator commandIter = str.begin() + spaceIndex;
 
     // // message is already cut by CR LF, so we start from 0
-    // std::string commandStr = rawMessage.substr(0, commandIter - rawMessage.begin());
-    // rawMessage = rawMessage.substr(commandIter - rawMessage.begin() + 1);
+    // std::string commandStr = str.substr(0, commandIter - str.begin());
+    // str = str.substr(commandIter - str.begin() + 1);
 
+    // DON'T BELIVE THIS LOGIC
     std::string commandStr;
-    if (std::getline(ss, commandStr, ' '))
+    // if (std::getline(ss, commandStr, ' '))
     {
         for (size_t i = 0; i < commandStr.length(); i++)
         {
@@ -908,9 +857,10 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
 
     message.mCommand = command;
 
+    // DON'T BELIVE THIS LOGIC
     // parse params
     std::string params;
-    std::getline(ss, params, '\r');
+    // std::getline(ss, params, '\r');
     // check params and push it to message's params vector
     std::string::iterator paramsIter = params.begin();
     while (paramsIter != params.end())
@@ -929,6 +879,7 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
                     return false;
                 }
             }
+            // TODO : consider emplace_back
             message.mParams.push_back(tmpParam);
             break;
         }
@@ -946,6 +897,7 @@ bool Server::parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>&
         paramsIter = nextParamsIter + 1;
     }
 
+    // CONSIDER MULTIPLE MESSAGES
     clientData->getParsedMessageQueue().push(message);
 
     return true;
@@ -1008,17 +960,17 @@ void Server::logHasStrCRLF(const std::string &str)
     {
         if (str[i] == '\r')
         {
-            Logger::log(DEBUG, str + "has CR");
+            Logger::log(DEBUG, str + " has CR");
             found = 1;
         }
         else if (str[i] == '\n')
         {
-            Logger::log(DEBUG, str + "has LF");
+            Logger::log(DEBUG, str + " has LF");
             found = 1;
         }
     }
     if (!found)
-        Logger::log(DEBUG, str + "has no CRLF");
+        Logger::log(DEBUG, str + " has no CRLF");
 }
 
 bool Server::isValidCommand(char c) const
