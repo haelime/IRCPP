@@ -74,7 +74,7 @@ bool Server::initServer(int argc, char** argv)
     struct kevent evListenEvent;
     evListenEvent.ident = mServerListenSocket; // trace this socket
     evListenEvent.filter = EVFILT_READ; // when read event occurs
-    evListenEvent.flags = EV_ADD; // add event, if it's already added, it will be ignored
+    evListenEvent.flags = EV_ADD | EV_ENABLE; // add event, if it's already added, it will be ignored
     evListenEvent.data = 0; // it means Filter-specific data value
     evListenEvent.udata = NULL; // no user data
 
@@ -186,11 +186,11 @@ void Server::run()
                     Logger::log(DEBUG, "New client is trying to connect");
                     if (SOCKET_ERROR == newClientSocket)
                     {
-                        Logger::log(FATAL, "Failed to accept new client");
+                        Logger::log(ERROR, "Failed to accept new client");
                         std::perror("accept");
                         close(mServerListenSocket);
                         assert(0);
-                        exit(1);
+                        continue;
                     }
 
                     Logger::log(INFO, "New client connected");
@@ -204,7 +204,8 @@ void Server::run()
                     Logger::log(DEBUG, "Setting non-blocking socket");
                     if (fcntl(newClientSocket, F_SETFL, O_NONBLOCK) == -1)
                     {
-                        Logger::log(FATAL, "Failed to set non-blocking socket");
+                        Logger::log(ERROR, "Failed to set non-blocking socket");
+                        Logger::log(ERROR, "Aborting...");
                         std::perror("fcntl");
                         close(mServerListenSocket);
                         close(newClientSocket);
@@ -225,7 +226,8 @@ void Server::run()
                     Logger::log(DEBUG, "Adding new client to kqueue");
                     if (KQUEUE_ERROR == kevent(mhKqueue, &newClientEvent, 1, NULL, 0, NULL))
                     {
-                        Logger::log(FATAL, "Failed to add new client to kqueue");
+                        Logger::log(ERROR, "Failed to add new client to kqueue");
+                        Logger::log(ERROR, "Aborting...");
                         std::perror("kevent newClientEvent");
                         close(mServerListenSocket);
                         close(newClientSocket);
@@ -309,6 +311,24 @@ void Server::run()
 
                 }
             }
+            else if (filteredEvents[i].flags & EVFILT_WRITE)
+            {
+                // Server can send message to client
+                Logger::log(DEBUG, "Server sending message to client");
+                Logger::log(DEBUG, "Finding clientData object");
+
+                SOCKET_FD clientFD= filteredEvents[i].ident;
+
+                ClientData clientData = mFdToClientGlobalMap.find(clientFD);
+
+                clientData.getParsedMessageQueue();
+
+
+
+                // Find the clientData
+
+
+            }
         }
 
         // Pass messages to MessageHandler after handling all events
@@ -337,8 +357,17 @@ void Server::run()
                     std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
                     ClientData* clientData = (*clientDataIter).second;
 
+                    struct kevent newSendEvent;
+                    memset(&newSendEvent, 0, sizeof(newSendEvent));
+                    newSendEvent.ident = newClientSocket;
+                    newSendEvent.filter = EVFILT_WRITE;
+                    newSendEvent.flags = EV_ADD | EV_ENABLE;
+                    newSendEvent.data = 0;
+                    newSendEvent.udata = NULL;
+                    kevent(mhKqueue, newSendEvent, 1, NULL, 0, NULL);
+
                     Logger::log(DEBUG, "Sending parsed message to clientData object");
-                    sendParsedMessages(clientData);
+                    enqueueParsedMessages(clientData);
                 }
                 mClientRecvMsgQueue.pop();
             }
@@ -346,8 +375,8 @@ void Server::run()
     }
 }
 
-void Server::sendParsedMessages(ClientData* clientData)
-{
+void Server::enqueueParsedMessages(ClientData* clientData)
+{ 
     SOCKET_FD clientFD = clientData->getClientSocket();
     std::map<std::string, ClientData*>::const_iterator nickIter;
     while (!clientData->getParsedMessageQueue().empty())
@@ -355,6 +384,9 @@ void Server::sendParsedMessages(ClientData* clientData)
         Message message = clientData->getParsedMessageQueue().front();
 
         // send message to client with kqueue
+
+        // for cross-validation, i implemented simple parse check here
+        // if parse part is done, gonna cross-check with the clientData object
         switch (message.mCommand)
         {
         case PASS:
@@ -369,33 +401,48 @@ void Server::sendParsedMessages(ClientData* clientData)
             if (message.mParams.size() != 1)
             {
                 Logger::log(ERROR, "Invalid message, PASS command must have 1 parameter");
-                // TODO : erase EVERY send and change to mSendQueue, if kqueue got write event, then send it
-                if (send(clientFD, ERR_NEEDMOREPARAMS, strlen(ERR_NEEDMOREPARAMS), 0) == SOCKET_ERROR)
-                {
-                    Logger::log(ERROR, "Failed to send ERR_NEEDMOREPARAMS");
-                    std::perror("send");
-                    delete clientData;
-                    mFdToClientGlobalMap.erase(clientFD);
-                    close(clientFD);
-                    assert(0);
-                    break;
-                }
+                Message errMessage;
+
+                errMessage.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
+                errMessage.mMessageVector.push_back("PASS");
+                errMessage.mMessageVector.push_back("Not enough parameters");
+
+                clientData->getServerToClientSendQueue().push(errMessage);
                 break;
             }
-            if (message.mParams[0] != mServerPassword)
+            // <user>       ::= <nonwhite> { <nonwhite> }
+            // <letter>     ::= 'a' ... 'z' | 'A' ... 'Z'
+            // <number>     ::= '0' ... '9'
+            // <special>    ::= '-' | '[' | ']' | '\' | '`' | '^' | '{' | '}'
+            // <nonwhite>   ::= <any 8bit code except SPACE (0x20)>
+
+            for (int i=0; i<message.mParams[0].length(); i++)
             {
-                Logger::log(ERROR, "Invalid password, disconnecting client");
-                if (send(clientData->getClientSocket(), "Password Missmatched, disconnecting...", strlen("Password Missmatched, disconnecting..."), 0) == SOCKET_ERROR)
+                if (isblank(message.mParams[0][i]) && message.mParams[0][i] != ' ')
                 {
-                    Logger::log(ERROR, "Failed to send ERR_PASSWDMISMATCH");
-                    std::perror("send");
+                    Logger::log(ERROR, "Invalid password, disconnecting client");
+                    Message errMessage;
+                    errMessage.mMessageVector.push_back(ERR_PASSWDMISMATCH);
+                    errMessage.mMessageVector.push_back("Password Missmatched, disconnecting...");
+
+                    clientData->getServerToClientSendQueue().push(errMessage);
                     delete clientData;
                     mFdToClientGlobalMap.erase(clientFD);
                     close(clientFD);
                     Logger::log(DEBUG, "Client disconnected");
-                    assert(0);
                     break;
                 }
+            }
+
+
+            if (message.mParams[0] != mServerPassword)
+            {
+                Logger::log(ERROR, "Invalid password, disconnecting client");
+                Message errMessage;
+                errMessage.mMessageVector.push_back(ERR_PASSWDMISMATCH);
+                errMessage..mMessageVector.push_back("Password Missmatched, disconnecting...");
+
+                clientData->getServerToClientSendQueue().push(errMessage);
                 delete clientData;
                 mFdToClientGlobalMap.erase(clientFD);
                 close(clientFD);
@@ -413,21 +460,22 @@ void Server::sendParsedMessages(ClientData* clientData)
             if (message.mParams.size() != 1)
             {
                 Logger::log(ERROR, "Invalid message");
+                Message errMessage;
+                errMessage.mMessageVector.push_back(ERR_NEEDMOREPARAM);
+                errMessage.mMessageVector.push_back("NICK");
+                errMessage.mMessageVector.push_back("Not enough parameters");
+                clientData->getServerToClientSendQueue().push(errMessage);
                 break;
             }
             nickIter = mNickToClientGlobalMap.find(message.mParams[0]);
             if (nickIter != mNickToClientGlobalMap.end())
             {
                 Logger::log(ERROR, "Nickname collision, sending ERR_NICKCOLLISION");
-                // send ERR_NICKCOLLISION
-                if (send(clientFD, ERR_NICKCOLLISION, strlen(ERR_NICKCOLLISION), 0) == SOCKET_ERROR)
-                {
-                    Logger::log(ERROR, "Failed to send ERR_NICKCOLLISION");
-                    std::perror("send");
-                    assert(0);
-                    break;
-                }
-                break;
+
+                Message errMessage;
+                errMessage.mMessageVector.push_back(ERR_NICKCOLLISION);
+                errMessage.mMessageVector.push_back("Nickname collision");
+                clientData->getServerToClientSendQueue().push(errMessage);    
             }
             clientData->setClientNickname(message.mParams[0]);
             Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + message.mParams[0]);
@@ -467,16 +515,10 @@ void Server::sendParsedMessages(ClientData* clientData)
             {
                 Logger::log(ERROR, "User is already registered, sending ERR_ALREADYREGISTRED");
                 // send ERR_ALREADYREGISTRED
-                if (send(clientData->getClientSocket(), ERR_ALREADYREGISTRED, strlen(ERR_ALREADYREGISTRED), 0) == SOCKET_ERROR)
-                {
-                    Logger::log(ERROR, "Failed to send ERR_ALREADYREGISTRED");
-                    std::perror("send");
-                    delete clientData;
-                    mFdToClientGlobalMap.erase(clientFD);
-                    close(clientFD);
-                    assert(0);
-                    break;
-                }
+                Message errMessage;
+                errMessage.mMessageVector.push_back (ERR_ALREADYREGISTRED);
+                errMessage.mMessageVector.push_back("User is already registered");
+                clientData->getServerToClientSendQueue().push(errMessage);
                 break;
             }
 
@@ -517,32 +559,47 @@ void Server::sendParsedMessages(ClientData* clientData)
 
             // The JOIN command is also used to join a one-to-one conversation with
             // another user.  To join a channel "#foo", the following message is sent:
-            if (message.mParams.size() != 1)
-            {
-                Logger::log(ERROR, "Invalid message, JOIN command must have 1 parameter");
-                if (send(clientFD, ERR_NEEDMOREPARAMS, strlen(ERR_NEEDMOREPARAMS), 0) == SOCKET_ERROR)
-                {
-                    Logger::log(ERROR, "Failed to send ERR_NEEDMOREPARAMS");
-                    std::perror("send");
-                    assert(0);
-                    break;
-                }
+           
+            // Examples:
 
-                break;
+            // JOIN #foobar                    ; join channel #foobar.
+
+            // JOIN &foo fubar                 ; join channel &foo using key "fubar".
+
+            // JOIN #foo,&bar fubar            ; join channel #foo using key "fubar"
+            //                                 and &bar using no key.
+
+            // JOIN #foo,#bar fubar,foobar     ; join channel #foo using key "fubar".
+            //                                 and channel #bar using key "foobar".
+
+            // JOIN #foo,#bar                  ; join channels #foo and #bar.
+
+            // :WiZ JOIN #Twilight_zone        ; JOIN message from WiZ
+
+
+            std::vector <std::string> channelNames;
+            std::vector <std::string> channelKeys;
+
+            for (int i = 1; i < message.mMessageVector.size(); i++)
+            {
+                if (i == 0) // < PASS
+                    continue;
+                if (message.mMessageVector[i][0] == '#')
+                    channelNames.push_back(message.mMessageVector[i]);
+                else if (message.mMessageVector[i][0] == '&')
+                    channelNames.push_back(message.mMessageVector[i]);
+                else
+                    channelKeys.push_back(message.mMessageVector[i]);
             }
-
-            if (message.mParams[0][0] != '#' || message.mParams[0][0] != '&')
+            std::map<std::string, Channel*>::const_iterator channelIter = mChannelGlobalMap.find(message.mParams[0]);
+            if (channelIter == mChannelGlobalMap.end())
             {
-                Logger::log(ERROR, "Invalid channel name, channel name must start with # or &");
-
-                if (send(clientFD, ERR_NOSUCHCHANNEL, strlen(ERR_NOSUCHCHANNEL), 0) == SOCKET_ERROR)
-                {
-                    Logger::log(ERROR, "Failed to send ERR_NOSUCHCHANNEL");
-                    std::perror("send");
-                    assert(0);
-                    break;
-                }
-                break;
+                Logger::log(DEBUG, "Channel not found, creating new channel");
+                Channel* newChannel = new Channel(message.mParams[0]);
+                mChannelGlobalMap[message.mParams[0]] = newChannel;
+                newChannel->setOperatorClient(clientData);
+                newChannel.
+                Logger::log(DEBUG, "Channel created");
             }
 
 

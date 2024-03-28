@@ -48,7 +48,7 @@ private:
     // ClientData Does NOTHING about this recvMsg, only server will handle it.
     bool parseReceivedRequestToClientData(std::pair<SOCKET_FD, std::string>& receivedRequest);
 
-    void sendParsedMessages(ClientData* clientData);
+    void enqueueParsedMessages(ClientData* clientData);
     bool isValidParameter(char c) const;
     bool isValidMessage(std::string &message) const;
     bool isValidCommand(char c) const;
