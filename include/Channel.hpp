@@ -22,14 +22,14 @@ public: // constructor, destructor
 
     // when there is same channel name, the server will find the Channel object and add the client to the vector
     Channel(std::string newChannelName) : mChannelName(newChannelName){};
-    // Channel(std::string newChannelName, std::string newChannelPassword) : mChannelName(newChannelName), mChannelPassword(newChannelPassword) {};
+    // Channel(std::string newChannelName, std::string newChannelPassword) : mChannelName(newChannelName), mPassword(newChannelPassword) {};
 
     // when there is no same channel name, the server will create this class and set the operatorClient as the first client and operator
     // Channel(ClientData *operatorClient, std::string newChannelName) : mChannelName(newChannelName)
     // {
         // setOperatorClient(operatorClient);
     // };
-    // Channel(ClientData *operatorClient, std::string newChannelName, std::string newChannelPassword) : mChannelName(newChannelName), mChannelPassword(newChannelPassword) {};
+    // Channel(ClientData *operatorClient, std::string newChannelName, std::string newChannelPassword) : mChannelName(newChannelName), mPassword(newChannelPassword) {};
 
     virtual ~Channel() {};
 
@@ -39,18 +39,14 @@ public: // getter, setters
     void setOperatorClient(ClientData *operatorClient) { mOperatorClient = operatorClient; };
     void setTopic(std::string &topic) { mTopic = topic; };
     void setMode(std::string &mode) { mMode = mode; };
-    void setChannelPassword(std::string &password) { mChannelPassword = password; };
+    void setPassword(std::string &password) { mPassword = password; };
     
     const std::string &getTopic() const { return mTopic; };
     const std::string &getMode() const { return mMode; };
-    const std::string& getChannelName() const { return mChannelName; };
+    const std::string& getName() const { return mChannelName; };
+    const std::string& getPassword() const { return mPassword; };
 
-    
-    // void addClient(ClientData *clientData) { mNameToClientDataMap[clientData->getClientSocket()] = clientData; };
-    // void removeClient(ClientData *clientData) { mNameToClientDataMap.erase(clientData->getClientSocket()); };
-
-    const std::map<std::string, ClientData *> &getClients() { return mNickToClientDataMap; };
-
+    std::map<std::string, ClientData *> &getNickToClientDataMap() { return mNickToClientDataMap; };
 
 
 private:
@@ -69,5 +65,5 @@ private: // data
     std::map<std::string, ClientData *> mNickToClientDataMap;
 
     std::string mChannelName;
-    std::string mChannelPassword;
+    std::string mPassword;
 };
