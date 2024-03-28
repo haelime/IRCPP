@@ -5,6 +5,7 @@
 
 enum Command
 {
+    NONE = 0,
     PASS,
     NICK,
     USER,
