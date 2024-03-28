@@ -320,11 +320,10 @@ void Server::run()
                 Logger::log(DEBUG, "Server sending message to client");
                 Logger::log(DEBUG, "Finding clientData object");
 
-                SOCKET_FD clientFD= filteredEvents[i].ident;
+                // SOCKET_FD clientFD = filteredEvents[i].ident;
 
-                ClientData clientData = mFdToClientGlobalMap.find(clientFD);
 
-                clientData.getParsedMessageQueue();
+                // std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
 
 
 
@@ -358,6 +357,7 @@ void Server::run()
                     SOCKET_FD clientFD = client;
                     // This logic Takes O(log N), probably can optimize it
                     std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
+                    SOCKET_FD newClientSocket = (*clientDataIter).first;
                     ClientData* clientData = (*clientDataIter).second;
 
                     struct kevent newSendEvent;
@@ -367,7 +367,7 @@ void Server::run()
                     newSendEvent.flags = EV_ADD | EV_ENABLE;
                     newSendEvent.data = 0;
                     newSendEvent.udata = NULL;
-                    kevent(mhKqueue, newSendEvent, 1, NULL, 0, NULL);
+                    kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL);
 
                     Logger::log(DEBUG, "Sending parsed message to clientData object");
                     enqueueParsedMessages(clientData);
@@ -387,7 +387,10 @@ void Server::enqueueParsedMessages(ClientData* clientData)
         Message message = clientData->getParsedMessageQueue().front();
 
         // send message to client with kqueue
-
+        Message errMessage;
+        std::vector <std::string> channelNames;
+        std::vector <std::string> channelKeys;
+        std::map<std::string, Channel*>::const_iterator channelIter = mNameToChannelGlobalMap.find(message.mMessageVector[0]);
         // for cross-validation, i implemented simple parse check here
         // if parse part is done, gonna cross-check with the clientData object
         switch (message.mCommand)
@@ -401,10 +404,9 @@ void Server::enqueueParsedMessages(ClientData* clientData)
             // connection is made.  If a PASS command has been sent and a NICK
             // command is not received in the same session, a nick name of "anonymous"
             // SHOULD be assigned.
-            if (message.mParams.size() != 1)
+            if (message.mMessageVector.size() != 1)
             {
                 Logger::log(ERROR, "Invalid message, PASS command must have 1 parameter");
-                Message errMessage;
 
                 errMessage.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
                 errMessage.mMessageVector.push_back("PASS");
@@ -419,12 +421,11 @@ void Server::enqueueParsedMessages(ClientData* clientData)
             // <special>    ::= '-' | '[' | ']' | '\' | '`' | '^' | '{' | '}'
             // <nonwhite>   ::= <any 8bit code except SPACE (0x20)>
 
-            for (int i=0; i<message.mParams[0].length(); i++)
+            for (size_t i=0; i<message.mMessageVector[0].length(); i++)
             {
-                if (isblank(message.mParams[0][i]) && message.mParams[0][i] != ' ')
+                if (isblank(message.mMessageVector[0][i]) && message.mMessageVector[0][i] != ' ')
                 {
                     Logger::log(ERROR, "Invalid password, disconnecting client");
-                    Message errMessage;
                     errMessage.mMessageVector.push_back(ERR_PASSWDMISMATCH);
                     errMessage.mMessageVector.push_back("Password Missmatched, disconnecting...");
 
@@ -438,12 +439,11 @@ void Server::enqueueParsedMessages(ClientData* clientData)
             }
 
 
-            if (message.mParams[0] != mServerPassword)
+            if (message.mMessageVector[0] != mServerPassword)
             {
                 Logger::log(ERROR, "Invalid password, disconnecting client");
-                Message errMessage;
                 errMessage.mMessageVector.push_back(ERR_PASSWDMISMATCH);
-                errMessage..mMessageVector.push_back("Password Missmatched, disconnecting...");
+                errMessage.mMessageVector.push_back("Password Missmatched, disconnecting...");
 
                 clientData->getServerToClientSendQueue().push(errMessage);
                 delete clientData;
@@ -459,29 +459,27 @@ void Server::enqueueParsedMessages(ClientData* clientData)
             //  If the server recieves an identical NICK from a client which is
             //  directly connected, it may issue an ERR_NICKCOLLISION to the local
             //  client, drop the NICK command, and not generate any kills.
-            Logger::log(DEBUG, "executing NICK command from " + getIpFromClientData(clientData) + " with nickname " + message.mParams[0]);
-            if (message.mParams.size() != 1)
+            Logger::log(DEBUG, "executing NICK command from " + getIpFromClientData(clientData) + " with nickname " + message.mMessageVector[0]);
+            if (message.mMessageVector.size() != 1)
             {
                 Logger::log(ERROR, "Invalid message");
-                Message errMessage;
-                errMessage.mMessageVector.push_back(ERR_NEEDMOREPARAM);
+                errMessage.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
                 errMessage.mMessageVector.push_back("NICK");
                 errMessage.mMessageVector.push_back("Not enough parameters");
                 clientData->getServerToClientSendQueue().push(errMessage);
                 break;
             }
-            nickIter = mNickToClientGlobalMap.find(message.mParams[0]);
+            nickIter = mNickToClientGlobalMap.find(message.mMessageVector[0]);
             if (nickIter != mNickToClientGlobalMap.end())
             {
                 Logger::log(ERROR, "Nickname collision, sending ERR_NICKCOLLISION");
 
-                Message errMessage;
                 errMessage.mMessageVector.push_back(ERR_NICKCOLLISION);
                 errMessage.mMessageVector.push_back("Nickname collision");
                 clientData->getServerToClientSendQueue().push(errMessage);    
             }
-            clientData->setClientNickname(message.mParams[0]);
-            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + message.mParams[0]);
+            clientData->setClientNickname(message.mMessageVector[0]);
+            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + message.mMessageVector[0]);
             break;
         case USER:
             //    The USER message is used at the beginning of connection to specify
@@ -507,7 +505,7 @@ void Server::enqueueParsedMessages(ClientData* clientData)
             //    recommended.  If the host which a user connects from has such a
             //    server enabled the username is set to that as in the reply from the
             //    "Identity Server".
-            if (message.mParams.size() != 4)
+            if (message.mMessageVector.size() != 4)
             {
                 Logger::log(ERROR, "Invalid message");
                 break;
@@ -518,17 +516,16 @@ void Server::enqueueParsedMessages(ClientData* clientData)
             {
                 Logger::log(ERROR, "User is already registered, sending ERR_ALREADYREGISTRED");
                 // send ERR_ALREADYREGISTRED
-                Message errMessage;
                 errMessage.mMessageVector.push_back (ERR_ALREADYREGISTRED);
                 errMessage.mMessageVector.push_back("User is already registered");
                 clientData->getServerToClientSendQueue().push(errMessage);
                 break;
             }
 
-            clientData->setUsername(message.mParams[0]);
-            clientData->setHostname(message.mParams[1]);
-            clientData->setServername(message.mParams[2]);
-            clientData->setRealname(message.mParams[3]);
+            clientData->setUsername(message.mMessageVector[0]);
+            clientData->setHostname(message.mMessageVector[1]);
+            clientData->setServername(message.mMessageVector[2]);
+            clientData->setRealname(message.mMessageVector[3]);
 
 
             break;
@@ -580,10 +577,9 @@ void Server::enqueueParsedMessages(ClientData* clientData)
             // :WiZ JOIN #Twilight_zone        ; JOIN message from WiZ
 
 
-            std::vector <std::string> channelNames;
-            std::vector <std::string> channelKeys;
 
-            for (int i = 1; i < message.mMessageVector.size(); i++)
+
+            for (size_t i = 1; i < message.mMessageVector.size(); i++)
             {
                 if (i == 0) // < PASS
                     continue;
@@ -594,14 +590,14 @@ void Server::enqueueParsedMessages(ClientData* clientData)
                 else
                     channelKeys.push_back(message.mMessageVector[i]);
             }
-            std::map<std::string, Channel*>::const_iterator channelIter = mChannelGlobalMap.find(message.mParams[0]);
-            if (channelIter == mChannelGlobalMap.end())
+            
+            if (channelIter == mNameToChannelGlobalMap.end())
             {
                 Logger::log(DEBUG, "Channel not found, creating new channel");
-                Channel* newChannel = new Channel(message.mParams[0]);
-                mChannelGlobalMap[message.mParams[0]] = newChannel;
+                Channel* newChannel = new Channel(message.mMessageVector[0]);
+                mNameToChannelGlobalMap[message.mMessageVector[0]] = newChannel;
                 newChannel->setOperatorClient(clientData);
-                newChannel.
+                // newChannel.
                 Logger::log(DEBUG, "Channel created");
             }
 
@@ -741,8 +737,8 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         if (mNickToClientGlobalMap.find(tmpPrefix) != mNickToClientGlobalMap.end())
         {
             // prefix is ALWAYS nick
-            message.mPrefix = tmpPrefix;
             message.mHasPrefix = true;
+            message.mMessageVector.push_back(tmpPrefix);
         }
         else
         {
@@ -880,7 +876,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
                 }
             }
             // TODO : consider emplace_back
-            message.mParams.push_back(tmpParam);
+            message.mMessageVector.push_back(tmpParam);
             break;
         }
         std::string tmpParam = params.substr(paramsIter - params.begin(), nextParamsIter - paramsIter);
@@ -893,7 +889,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
                 return false;
             }
         }
-        message.mParams.push_back(tmpParam);
+        message.mMessageVector.push_back(tmpParam);
         paramsIter = nextParamsIter + 1;
     }
 
