@@ -22,8 +22,9 @@ enum Command
 
 struct Message
 {
+    Message() : mHasPrefix(false) {};
+    
     bool mHasPrefix;
-    std::string mPrefix;
 
     Command mCommand;
     std::vector <std::string> mParams;
