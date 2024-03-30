@@ -511,6 +511,9 @@ void Server::executeParsedMessages(ClientData* clientData)
             //    recommended.  If the host which a user connects from has such a
             //    server enabled the username is set to that as in the reply from the
             //    "Identity Server".
+            Logger::log(DEBUG, "executing USER command from");
+            Server::logClientData(clientData);
+
             successMessageToClient.mCommand = NONE;
             successMessageToClient.mMessageVector.clear();
             successMessageToClient.mMessageVector.push_back(RPL_PASSACCEPTED);
@@ -576,28 +579,149 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             // :WiZ JOIN #Twilight_zone        ; JOIN message from WiZ
 
-            // channels are separated by ','
-            // add channel to clientData object
+            Logger::log(DEBUG, "executing JOIN command from");
+            Server::logClientData(clientData);
+            Server::logMessage(messageToExecute);
 
+            // channels and keys are separated by ','
+            // add channel to channelNames vector
+            Logger::log(DEBUG, "Parsing channel names and keys");
             posStart = 0;
             posEnd = messageToExecute.mMessageVector[paramStartPos].find(',');
-            while (messageToExecute.mMessageVector[paramStartPos].find(',') != std::string::npos)
+            while (posEnd != std::string::npos)
             {
-                channelNames.push_back(messageToExecute.mMessageVector[paramStartPos].substr(posStart, posEnd));
+                std::string channelName = messageToExecute.mMessageVector[paramStartPos].substr(posStart, posEnd);
+                if (channelName.length() == 0)
+                {
+                    Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
+                    errMessageToClient.mMessageVector.push_back("Channel name is empty");
+                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                    Server::logClientData(clientData);
+                    return;
+                }else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
+                {
+                    Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mMessageVector.push_back(ERR_NOSUCHCHANNEL);
+                    errMessageToClient.mMessageVector.push_back("Channel name is too long");
+                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                    Server::logClientData(clientData);
+                    return;
+                }
+                channelNames.push_back(channelName);
                 posStart = posEnd + 1;
                 posEnd = messageToExecute.mMessageVector[paramStartPos].find(',', posStart);
             }
-
-            // add keys to clientData object
-            posStart = 0;
-            posEnd = messageToExecute.mMessageVector[paramStartPos + 1].find(',');
-            while (messageToExecute.mMessageVector[paramStartPos + 1].find(',') != std::string::npos)
+            // add last channel to channelNames vector
             {
-                channelKeys.push_back(messageToExecute.mMessageVector[paramStartPos + 1].substr(posStart, posEnd));
-                posStart = posEnd + 1;
-                posEnd = messageToExecute.mMessageVector[paramStartPos + 1].find(',', posStart);
+                std::string channelName = messageToExecute.mMessageVector[paramStartPos].substr(posStart, posEnd);
+                if (channelName.length() == 0)
+                {
+                    Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
+                    errMessageToClient.mMessageVector.push_back("Channel name is empty");
+                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                    Server::logClientData(clientData);
+                    return;
+                }
+                else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
+                {
+                    Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mMessageVector.push_back(ERR_NOSUCHCHANNEL);
+                    errMessageToClient.mMessageVector.push_back("Channel name is too long");
+                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                    Server::logClientData(clientData);
+                    return;
+                }
+                channelNames.push_back(channelName);
             }
 
+            if (channelNames.size() > 0)
+            {
+                Logger::log(DEBUG, "Channel names parsed");
+                for (size_t i = 0; i < channelNames.size(); i++)
+                {
+                    Logger::log(DEBUG, "Channel name : " + channelNames[i]);
+                }
+            }
+            else
+            {
+                Logger::log(WARNING, "No channel names, sending ERR_NEEDMOREPARAMS");
+                errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageVector.push_back("No channel names");
+                clientData->getServerToClientSendQueue().push(errMessageToClient);
+                Server::logClientData(clientData);
+                return;
+            }
+            // if there is key parameter, add it to channelKeys Vector
+            if (messageToExecute.mMessageVector.size() == paramStartPos + 2)
+            {
+                Logger::log(DEBUG, "Parsing channel keys");
+                posStart = 0;
+                posEnd = messageToExecute.mMessageVector[paramStartPos + 1].find(',');
+                while (posEnd != std::string::npos)
+                {
+                    std::string channelKey = messageToExecute.mMessageVector[paramStartPos + 1].substr(posStart, posEnd);
+                    if (channelKey.length() == 0)
+                    {
+                        Logger::log(ERROR, "Channel key is empty, sending ERR_NEEDMOREPARAMS");
+                        errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
+                        errMessageToClient.mMessageVector.push_back("Channel key is empty");
+                        clientData->getServerToClientSendQueue().push(errMessageToClient);
+                        Server::logClientData(clientData);
+                        return;
+                    }
+                    else if (channelKey.length() > MAX_CHANNEL_KEY_LENGTH)
+                    {
+                        Logger::log(ERROR, "Channel key is too long, sending ERR_BADCHANNELKEY");
+                        errMessageToClient.mMessageVector.push_back(ERR_BADCHANNELKEY);
+                        errMessageToClient.mMessageVector.push_back("Channel key is too long");
+                        clientData->getServerToClientSendQueue().push(errMessageToClient);
+                        Server::logClientData(clientData);
+                        return;
+                    }
+                    channelKeys.push_back(channelKey);
+                    posStart = posEnd + 1;
+                    posEnd = messageToExecute.mMessageVector[paramStartPos + 1].find(',', posStart);
+                }
+                std::string channelKey = messageToExecute.mMessageVector[paramStartPos + 1].substr(posStart, posEnd);
+                if (channelKey.length() == 0)
+                {
+                    Logger::log(ERROR, "Channel key is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
+                    errMessageToClient.mMessageVector.push_back("Channel key is empty");
+                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                    Server::logClientData(clientData);
+                    return;
+                }
+                else if (channelKey.length() > MAX_CHANNEL_KEY_LENGTH)
+                {
+                    Logger::log(ERROR, "Channel key is too long, sending ERR_BADCHANNELKEY");
+                    errMessageToClient.mMessageVector.push_back(ERR_BADCHANNELKEY);
+                    errMessageToClient.mMessageVector.push_back("Channel key is too long");
+                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                    Server::logClientData(clientData);
+                    return;
+                }
+                channelKeys.push_back(channelKey);
+            }
+            if (channelKeys.size() > 0)
+            {
+                Logger::log(DEBUG, "Channel keys parsed");
+                for (size_t i = 0; i < channelNames.size(); i++)
+                {
+                    Logger::log(DEBUG, "Channel name : " + channelNames[i]);
+                    if (channelKeys.size() > i)
+                        Logger::log(DEBUG, "With Channel key : " + channelKeys[i]);
+                }
+            }
+            else
+            {
+                Logger::log(DEBUG, "No channel keys");
+            }
+            
+
+            Logger ::log(DEBUG, "Adding client to channels");
 
             for (size_t i = 0; i < channelNames.size(); i++)
             {
@@ -621,11 +745,15 @@ void Server::executeParsedMessages(ClientData* clientData)
                     {
                         newChannel->setPassword(channelKeys[i]);
                         connectClientDataWithChannel(clientData, newChannel, channelKeys[i]);
-                        Logger::log(DEBUG, "Channel created with password");
+                        Logger::log(INFO, "Channel created with password");
+                        Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + newChannel->getName() + " with password");
+                        Server::logClientData(clientData);
                         continue;
                     }
                     connectClientDataWithChannel(clientData, newChannel);
-                    Logger::log(DEBUG, "Channel created");
+                    Logger::log(INFO, "Channel created without password");
+                    Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + newChannel->getName() + " with password");
+                    Server::logClientData(clientData);
                 }
                 else
                 {
@@ -652,12 +780,13 @@ void Server::executeParsedMessages(ClientData* clientData)
                             successMessageToClient.mMessageVector.push_back(channel->getName());
                             successMessageToClient.mMessageVector.push_back(channel->getTopic());
                             clientData->getServerToClientSendQueue().push(successMessageToClient);
-                            Logger::log(DEBUG, "Channel joined with password");
+                            Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + channel->getName() + " with password");
+                            Server::logClientData(clientData);
                             continue;
                         }
                         else
                         {
-                            Logger::log(ERROR, "Invalid password, sending ERR_BADCHANNELKEY");
+                            Logger::log(WARNING, "Invalid password, sending ERR_BADCHANNELKEY");
                             errMessageToClient.mMessageVector.push_back(ERR_BADCHANNELKEY);
                             errMessageToClient.mMessageVector.push_back("Invalid password");
                             clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -674,7 +803,8 @@ void Server::executeParsedMessages(ClientData* clientData)
                     successMessageToClient.mMessageVector.push_back(channel->getTopic());
                     clientData->getServerToClientSendQueue().push(successMessageToClient);
 
-                    Logger::log(DEBUG, "Channel joined");
+                    Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + channel->getName());
+                    Server::logClientData(clientData);
                 }
             }
 
@@ -1167,7 +1297,7 @@ bool Server::isValidMessage(const Message& message) const
 
 void Server::logClientData(ClientData* clientData) const
 {
-    Logger::log(DEBUG, "================= Beggining Client Data ================");
+    Logger::log(DEBUG, "--------------- Beggining Client Data --------------");
     Logger::log(DEBUG, "NickName : " + clientData->getClientNickname());
     Logger::log(DEBUG, "Username : " + clientData->getUsername());
     Logger::log(DEBUG, "Hostname : " + clientData->getHostname());
@@ -1186,7 +1316,8 @@ void Server::logClientData(ClientData* clientData) const
     {
         Logger::log(DEBUG, "Channel : " + channelIter->first);
     }
-    Logger::log(DEBUG, "------------------ End of Client Data ------------------");
+    Logger::log(DEBUG, "< End Of Joined Channel List >");
+    Logger::log(DEBUG, "================ End of Client Data ================");
 }
 
 const std::string Server::getIpFromClientData(ClientData* clientData) const
@@ -1241,7 +1372,7 @@ void Server::connectClientDataWithChannel(ClientData* clientData, Channel* chann
 
 void Server::logMessage(const Message& message) const
 {
-    Logger::log(DEBUG, "================= Beggining Message ================");
+    Logger::log(DEBUG, "----------------- Beggining Message ----------------");
     Logger::log(DEBUG, "Command : " + ValToString(message.mCommand));
     Logger::log(DEBUG, "Has Prefix : " + ValToString(message.mHasPrefix));
     Logger::log(DEBUG, "Message Vector : ");
@@ -1249,5 +1380,5 @@ void Server::logMessage(const Message& message) const
     {
         Logger::log(DEBUG, message.mMessageVector[i]);
     }
-    Logger::log(DEBUG, "------------------ End of Message ------------------");
+    Logger::log(DEBUG, "================== End of Message ==================");
 }
