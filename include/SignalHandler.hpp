@@ -1,38 +1,32 @@
 #pragma once
 
 #include <csignal>
+#include <string>
+#include <iostream>
+#include <map>
+#include <utility>
+#include "Server.hpp"
+#include "Channel.hpp"
+#include "ClientData.hpp"
 
 // if server user wants to stop server, then server should stop and close all sockets
 class SignalHandler
 {
-    public:
-        SignalHandler();
-        ~SignalHandler();
+public:
+    ~SignalHandler() {};
 
-    public:
-        void setSignals(void)
-        {
-            // TODO : close all sockets when receive sigint, sigterm, sigkill
+public:
+    static void setSignals(Server &server);
 
-            // Should we handle every signals to protect server?
+private:
+    SignalHandler(){};
+    SignalHandler(const SignalHandler &src){ (void) src; };
+    SignalHandler& operator=(const SignalHandler& src) { (void)src; return *this; };
 
-            // SIGINT : ctrl + c
-            // SIGTERM : ctrl + \
-            // SIGKILL : kill -9
+    static void handleSigInt(int signal);
 
-            // signal(SIGINT, signalHandler);
-            // signal(SIGTERM, signalHandler);
-            // signal(SIGKILL, signalHandler);
-            
-            
-
-        };
-        bool isServerRunning(void);
-
-    private:
-        static void closeEverySockets(int signal);
-        static bool mServerRunning;
+    static Server *mServer;
 };
 
 
-        
+

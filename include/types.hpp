@@ -19,11 +19,12 @@ enum Command
     INVITE,
     TOPIC,
     MODE,
+    NOTICE, // <- it's similar with PRIVMSG. no need to implement but, just in case
 };
 
 struct Message
 {
-    Message() : mHasPrefix(false) {};
+    Message() : mHasPrefix(false), mCommand(NONE) {};
     
     bool mHasPrefix;
 

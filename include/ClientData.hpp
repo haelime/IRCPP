@@ -60,7 +60,7 @@ public: // getter, setters
 
     std::queue <Message>& getServerToClientSendQueue() { return mServerToClientSendQueue; };
     std::map <std::string, Channel*>& getConnectedChannels() { return mNameToConnectedChannelMap; };
-    std::queue <Message> &getParsedMessageQueue() { return mParsedMessageQueue; };
+    std::queue <Message> &getExecuteMessageQueue() { return mParsedMessageQueue; };
 
 public:
     // should handle error if the recvStr is too big

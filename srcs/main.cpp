@@ -2,6 +2,7 @@
 #include "Server.hpp"
 #include "ClientData.hpp"
 #include "Channel.hpp"
+#include "SignalHandler.hpp"
 
 // You must be able to authenticate, set a nickname, a username, join a channel,
 // send and receive private messages using your reference client.
@@ -26,6 +27,7 @@ int main (int argc, char **argv)
 {
     Server server;
 
+    SignalHandler::setSignals(server);
     Logger::setConsoleLogging(true);
     Logger::setFileLogging("IrcServer.log");
     Logger::setLogLevel(DEBUG | INFO | WARNING | ERROR | FATAL | DEFAULT);
@@ -36,8 +38,6 @@ int main (int argc, char **argv)
         return 1;
     }
     server.run();
-
-    // Logger::closeFileLogging();
 
     return 0;
 }

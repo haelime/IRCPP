@@ -1,7 +1,9 @@
 TARGET = ircserv
 
 CXX = c++
-CXXFLAGS = -Wall -Werror -Wextra -std=c++98 -g
+
+CXXFLAGS = -Wall -Werror -Wextra -std=c++98\
+-g -fsanitize=address # DEBUG
 
 CWD = $(shell pwd)
 SRCDIR = $(CWD)/srcs
@@ -11,6 +13,7 @@ SOURCE = $(SRCDIR)/main.cpp \
 		 $(SRCDIR)/ClientData.cpp \
 		 $(SRCDIR)/Channel.cpp \
 		 $(SRCDIR)/Logger.cpp \
+		 $(SRCDIR)/SignalHandler.cpp \
 
 OBJECTS = $(SOURCE:.cpp=.o)\
 

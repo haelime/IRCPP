@@ -29,7 +29,7 @@ class Channel;
 class Server
 {
 public:
-    Server() {};
+    Server() : mIsRunning(false) {};
     ~Server() {};
 
     void printUsage(char** argv)
@@ -40,6 +40,9 @@ public:
     void run();
     void stop() {}; // TODO : implement
 
+    std::map<SOCKET_FD, ClientData*>& getFdToClientGlobalMap() { return mFdToClientGlobalMap; }
+    std::map<std::string, Channel*>& getNameToChannelGlobalMap() { return mNameToChannelGlobalMap; }
+
 
 private:
     bool setPortAndPassFromArgv(int argc, char** argv);
@@ -48,10 +51,10 @@ private:
     // ClientData Does NOTHING about this recvMsg, only server will handle it.
     bool parseReceivedRequestFromClientData(SOCKET_FD client);
 
-    void enqueueParsedMessages(ClientData* clientData);
-    bool isValidParameter(char c) const;
-    bool isValidMessage(std::string &message) const;
+    void executeParsedMessages(ClientData* clientData);
+    bool isValidMessage(const Message& message) const;
     bool isValidCommand(char c) const;
+    bool isValidParameter(char c) const;
 
     const std::string getIpFromClientData(ClientData *clientData) const;
 
@@ -61,7 +64,7 @@ private:
     void connectClientDataWithChannel(ClientData *clientData, Channel *channel);
     void connectClientDataWithChannel(ClientData *clientData, Channel *channel, const std::string &password);
 
-
+    void logMessage(const Message &message) const;
 
 private:  // server network data
     SOCKET_FD mServerListenSocket;
@@ -85,5 +88,6 @@ private: // server data
 
     time_t mServerStartTime;
     time_t mServerLastPingTime; //< to kick if not received in 2 seconds
+    bool mIsRunning;
 
 };
