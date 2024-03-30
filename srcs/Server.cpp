@@ -361,7 +361,7 @@ void Server::run()
                 // memset(&newSendEvent, 0, sizeof(newSendEvent));
                 // newSendEvent.ident = clientFD;
                 // newSendEvent.filter = EVFILT_WRITE;
-                // newSendEvent.flags = ;
+                // newSendEvent.flags = EV_DISABLE;
                 // newSendEvent.data = 0;
                 // newSendEvent.udata = NULL;
                 // kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL);
@@ -386,28 +386,33 @@ void Server::run()
             while (!mClientRecvProcessQueue.empty())
             {
                 // send receivedRequest to clientData, and server will handle the message
-                SOCKET_FD client = mClientRecvProcessQueue.front();
+                SOCKET_FD clientFD = mClientRecvProcessQueue.front();
                 Logger::log(DEBUG, "Parsing received message to clientData object");
 
-                while (parseReceivedRequestFromClientData(client) == true)
+                std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
+                if (clientDataIter == mFdToClientGlobalMap.end())
+                {
+                    Logger::log(ERROR, "ClientData not found, closing socket");
+                    close(clientFD);
+                    assert(0);
+                    continue;
+                }
+                ClientData* clientData = (*clientDataIter).second;
+                while (parseReceivedRequestFromClientData(clientFD) == true)
                 {
                     Logger::log(DEBUG, "Message parsed successfully");
-                    SOCKET_FD clientFD = client;
                     // This logic Takes O(log N), probably can optimize it
-                    std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
-                    SOCKET_FD newClientSocket = (*clientDataIter).first;
-                    ClientData* clientData = (*clientDataIter).second;
 
                     struct kevent newSendEvent;
                     memset(&newSendEvent, 0, sizeof(newSendEvent));
-                    newSendEvent.ident = newClientSocket;
+                    newSendEvent.ident = clientFD;
                     newSendEvent.filter = EVFILT_WRITE;
-                    newSendEvent.flags = EV_DELETE;
+                    newSendEvent.flags = EV_ENABLE;
                     newSendEvent.data = 0;
                     newSendEvent.udata = NULL;
                     kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL);
 
-                    Logger::log(DEBUG, "Enqueing parsed message to clientData object");
+                    Logger::log(DEBUG, "Executing parsed message to clientData object");
                     executeParsedMessages(clientData);
                 }
                 mClientRecvProcessQueue.pop();
