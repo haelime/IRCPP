@@ -177,7 +177,7 @@ void Server::run()
                 Logger::log(DEBUG, "Client socket closed");
                 // assert(0);
             }
-            else if (filteredEvents[i].flags & EVFILT_READ)
+            else if (filteredEvents[i].filter == EVFILT_READ)
             {
                 // New client is trying to connect
                 if (static_cast<int>(filteredEvents[i].ident) == mServerListenSocket)
@@ -315,7 +315,7 @@ void Server::run()
 
                 }
             }
-            else if (filteredEvents[i].flags & EVFILT_WRITE)
+            else if (filteredEvents[i].filter == EVFILT_WRITE)
             {
                 // TODO : if send is done successfully, remove EVFILT_WRITE event
 
@@ -337,11 +337,19 @@ void Server::run()
                 }
                 Logger::log(DEBUG, "ClientData object found");
 
-                // Send message to client
-                Logger::log(DEBUG, "Sending message : " + clientData->getServerToClientSendQueue().front().mMessageVector[0]);
-                std::string sendMsg = clientData->getServerToClientSendQueue().front().mMessageVector[0] + "\r\n";
-                int sendMsgLength = send(clientFD, sendMsg.c_str(), sendMsg.length(), 0);
+                // Make message to send from message tokens
+                // :<Server Name> <Message> \r\n
+                std::string sendMsg = ":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)) + " ";
+                std::vector<std::string> messageTokens = clientData->getServerToClientSendQueue().front().mMessageTokens; 
+                for (size_t tokenIdx = 0; tokenIdx < messageTokens.size(); tokenIdx++)
+                {
+                    sendMsg += messageTokens[tokenIdx];
+                    if (tokenIdx != messageTokens.size() - 1)
+                        sendMsg += " ";
+                }
+                sendMsg += "\r\n";
 
+                const int sendMsgLength = send(clientFD, sendMsg.c_str(), sendMsg.length(), 0);
                 if (SOCKET_ERROR == sendMsgLength)
                 {
                     Logger::log(ERROR, "Failed to send message to client");
@@ -351,20 +359,30 @@ void Server::run()
                     continue;
                 }
 
-                Logger::log(INFO, "Server sent message : " + sendMsg);
+                Logger::log(INFO, "Server sent message : " + std::string(sendMsg, sendMsgLength));
 
                 // Pop message from queue
                 clientData->getServerToClientSendQueue().pop();
 
-                // Remove EVFILT_WRITE event
-                // struct kevent newSendEvent;
-                // memset(&newSendEvent, 0, sizeof(newSendEvent));
-                // newSendEvent.ident = clientFD;
-                // newSendEvent.filter = EVFILT_WRITE;
-                // newSendEvent.flags = EV_DISABLE;
-                // newSendEvent.data = 0;
-                // newSendEvent.udata = NULL;
-                // kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL);
+                // Disable EVFILT_WRITE filter when the message is fully sent
+                if (clientData->getServerToClientSendQueue().empty())
+                {
+                    struct kevent newSendEvent;
+                    memset(&newSendEvent, 0, sizeof(newSendEvent));
+                    newSendEvent.ident = clientFD;
+                    newSendEvent.filter = EVFILT_WRITE;
+                    newSendEvent.flags = EV_DELETE;
+                    newSendEvent.data = 0;
+                    newSendEvent.udata = NULL;
+                    if (kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL) == -1)
+                    {
+                        Logger::log(ERROR, "Failed to disable EVFILT_WRITE event");
+                        std::perror("kevent");
+                        close(clientFD);
+                        assert(false);
+                        continue;
+                    }
+                }
 
                 // Find the clientData
 
@@ -387,6 +405,7 @@ void Server::run()
             {
                 // send receivedRequest to clientData, and server will handle the message
                 SOCKET_FD clientFD = mClientRecvProcessQueue.front();
+                mClientRecvProcessQueue.pop();
                 Logger::log(DEBUG, "Parsing received message to clientData object");
 
                 std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
@@ -397,25 +416,34 @@ void Server::run()
                     assert(0);
                     continue;
                 }
+                
                 ClientData* clientData = (*clientDataIter).second;
                 while (parseReceivedRequestFromClientData(clientFD) == true)
                 {
                     Logger::log(DEBUG, "Message parsed successfully");
                     // This logic Takes O(log N), probably can optimize it
 
-                    struct kevent newSendEvent;
-                    memset(&newSendEvent, 0, sizeof(newSendEvent));
-                    newSendEvent.ident = clientFD;
-                    newSendEvent.filter = EVFILT_WRITE;
-                    newSendEvent.flags = EV_ENABLE;
-                    newSendEvent.data = 0;
-                    newSendEvent.udata = NULL;
-                    kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL);
-
                     Logger::log(DEBUG, "Executing parsed message to clientData object");
                     executeParsedMessages(clientData);
                 }
-                mClientRecvProcessQueue.pop();
+
+                // Enable EVFILT_WRITE filter when there is message to send
+                struct kevent newSendEvent;
+                memset(&newSendEvent, 0, sizeof(newSendEvent));
+                newSendEvent.ident = clientFD;
+                newSendEvent.filter = EVFILT_WRITE;
+                newSendEvent.flags = EV_ADD;
+                newSendEvent.data = 0;
+                newSendEvent.udata = NULL;
+                if (kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL) == -1)
+                {
+                    Logger::log(ERROR, "Failed to enable EVFILT_WRITE event");
+                    std::perror("kevent");
+                    close(clientFD);
+                    assert(false);
+                    continue;
+                }
+                
             }
 
         }
@@ -431,13 +459,14 @@ void Server::executeParsedMessages(ClientData* clientData)
         Message messageToExecute = clientData->getExecuteMessageQueue().front();
         size_t commandStartPos = 0;
         size_t paramStartPos = 1;
+        
+        // Ignore prefix
         if (messageToExecute.mHasPrefix) // TODO : fix with this position
         {
             commandStartPos++;
             paramStartPos++;
         }
 
-        // send message to client with kqueue
         Message errMessageToClient;
         Message successMessageToClient;
         std::vector <std::string> channelNames;
@@ -445,8 +474,7 @@ void Server::executeParsedMessages(ClientData* clientData)
         std::map<std::string, Channel*>::iterator globalChannelIter;
         size_t posStart;
         size_t posEnd;
-        // for cross-validation, i implemented simple parse check here
-        // if parse part is done, gonna cross-check with the clientData object
+        // Excute corresponding command
         switch (messageToExecute.mCommand)
         {
         case NONE:
@@ -462,15 +490,53 @@ void Server::executeParsedMessages(ClientData* clientData)
             // command is not received in the same session, a nick name of "anonymous"
             // SHOULD be assigned.
 
+
             // When PASS is done, response back with NOTICE AUTH :*** Looking up your hostname...
+            if (mServerPassword == "" || mServerPassword == messageToExecute.mMessageTokens[commandStartPos + 1])
+            {
+                Logger::log(INFO, "Client passed password");
+                Logger::log(DEBUG, "Sending RPL_PASSACCEPTED");
+
+                Message errMessagetoClient;
+                errMessagetoClient.mMessageTokens.push_back(RPL_PASSACCEPTED);
+                errMessagetoClient.mMessageTokens.push_back("Password accepted");
+                Logger::log(INFO, "Client Successfully sent PASS command and authenticated");
+
+                successMessageToClient.mCommand = NOTICE;
+                successMessageToClient.mMessageTokens.clear();
+                successMessageToClient.mMessageTokens.push_back("NOTICE");
+                successMessageToClient.mMessageTokens.push_back("AUTH");
+                successMessageToClient.mMessageTokens.push_back(":*** Looking up your hostname...");
+                clientData->getServerToClientSendQueue().push(successMessageToClient);
+                clientData->getExecuteMessageQueue().push(messageToExecute);
+                break;
+            }
+            else if (messageToExecute.mMessageTokens[commandStartPos + 1] != mServerPassword)
+            {
+                Logger::log(WARNING, "Invalid password, disconnecting client");
+                Server::logMessage(messageToExecute);
+                Message errMessageToClient;
+                errMessageToClient.mMessageTokens.push_back(ERR_PASSWDMISMATCH);
+                errMessageToClient.mMessageTokens.push_back("Password Missmatched, disconnecting...");
+
+                const SOCKET_FD clientFD = clientData->getClientSocket();
+                delete clientData;
+                mFdToClientGlobalMap.erase(clientFD);
+                close(clientFD);
+                Logger::log(DEBUG, "Client disconnected");
+
+                clientData->getServerToClientSendQueue().push(errMessageToClient);
+                assert(false);
+                break;
+            }
 
             Logger::log(INFO, "Client Successfully sent PASS command and authenticated");
 
             successMessageToClient.mCommand = NOTICE;
-            successMessageToClient.mMessageVector.clear();
-            successMessageToClient.mMessageVector.push_back("NOTICE");
-            successMessageToClient.mMessageVector.push_back("AUTH");
-            successMessageToClient.mMessageVector.push_back(":*** Looking up your hostname...");
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back("NOTICE");
+            successMessageToClient.mMessageTokens.push_back("AUTH");
+            successMessageToClient.mMessageTokens.push_back(":*** Looking up your hostname...");
             clientData->getServerToClientSendQueue().push(successMessageToClient);
 
             break;
@@ -480,16 +546,16 @@ void Server::executeParsedMessages(ClientData* clientData)
             //  If the server recieves an identical NICK from a client which is
             //  directly connected, it may issue an ERR_NICKCOLLISION to the local
             //  client, drop the NICK command, and not generate any kills.
-            Logger::log(DEBUG, "executing NICK command from " + getIpFromClientData(clientData) + " with nickname " + messageToExecute.mMessageVector[0]);
+            Logger::log(DEBUG, "executing NICK command from " + getIpFromClientData(clientData) + " with nickname " + messageToExecute.mMessageTokens[0]);
             
             successMessageToClient.mCommand = NONE;
-            successMessageToClient.mMessageVector.clear();
-            successMessageToClient.mMessageVector.push_back(RPL_PASSACCEPTED);
-            successMessageToClient.mMessageVector.push_back("Password accepted");
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back(RPL_PASSACCEPTED);
+            successMessageToClient.mMessageTokens.push_back("Password accepted");
             clientData->getServerToClientSendQueue().push(successMessageToClient);
 
-            clientData->setClientNickname(messageToExecute.mMessageVector[paramStartPos]);
-            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + messageToExecute.mMessageVector[0]);
+            clientData->setClientNickname(messageToExecute.mMessageTokens[paramStartPos]);
+            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + messageToExecute.mMessageTokens[0]);
             break;
 
         case USER:
@@ -520,20 +586,20 @@ void Server::executeParsedMessages(ClientData* clientData)
             Server::logClientData(clientData);
 
             successMessageToClient.mCommand = NONE;
-            successMessageToClient.mMessageVector.clear();
-            successMessageToClient.mMessageVector.push_back(RPL_PASSACCEPTED);
-            successMessageToClient.mMessageVector.push_back("Password accepted");
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back(RPL_PASSACCEPTED);
+            successMessageToClient.mMessageTokens.push_back("Password accepted");
             clientData->getServerToClientSendQueue().push(successMessageToClient);
 
-            clientData->setUsername(messageToExecute.mMessageVector[paramStartPos]);
-            clientData->setHostname(messageToExecute.mMessageVector[paramStartPos + 1]);
-            clientData->setServername(messageToExecute.mMessageVector[paramStartPos + 2]);
-            clientData->setRealname(messageToExecute.mMessageVector[paramStartPos + 3]);
+            clientData->setUsername(messageToExecute.mMessageTokens[paramStartPos]);
+            clientData->setHostname(messageToExecute.mMessageTokens[paramStartPos + 1]);
+            clientData->setServername(messageToExecute.mMessageTokens[paramStartPos + 2]);
+            clientData->setRealname(messageToExecute.mMessageTokens[paramStartPos + 3]);
 
-            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set username to " + messageToExecute.mMessageVector[paramStartPos]);
-            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set hostname to " + messageToExecute.mMessageVector[paramStartPos + 1]);
-            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set servername to " + messageToExecute.mMessageVector[paramStartPos + 2]);
-            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set realname to " + messageToExecute.mMessageVector[paramStartPos + 3]);
+            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set username to " + messageToExecute.mMessageTokens[paramStartPos]);
+            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set hostname to " + messageToExecute.mMessageTokens[paramStartPos + 1]);
+            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set servername to " + messageToExecute.mMessageTokens[paramStartPos + 2]);
+            Logger::log(INFO, "Client " + clientData->getClientNickname() + " set realname to " + messageToExecute.mMessageTokens[paramStartPos + 3]);
 
             Server::logClientData(clientData);
             break;
@@ -592,39 +658,39 @@ void Server::executeParsedMessages(ClientData* clientData)
             // add channel to channelNames vector
             Logger::log(DEBUG, "Parsing channel names and keys");
             posStart = 0;
-            posEnd = messageToExecute.mMessageVector[paramStartPos].find(',');
+            posEnd = messageToExecute.mMessageTokens[paramStartPos].find(',');
             while (posEnd != std::string::npos)
             {
-                std::string channelName = messageToExecute.mMessageVector[paramStartPos].substr(posStart, posEnd);
+                std::string channelName = messageToExecute.mMessageTokens[paramStartPos].substr(posStart, posEnd);
                 if (channelName.length() == 0)
                 {
                     Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
-                    errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-                    errMessageToClient.mMessageVector.push_back("Channel name is empty");
+                    errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                    errMessageToClient.mMessageTokens.push_back("Channel name is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
                 }else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
                 {
                     Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
-                    errMessageToClient.mMessageVector.push_back(ERR_NOSUCHCHANNEL);
-                    errMessageToClient.mMessageVector.push_back("Channel name is too long");
+                    errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                    errMessageToClient.mMessageTokens.push_back("Channel name is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
                 }
                 channelNames.push_back(channelName);
                 posStart = posEnd + 1;
-                posEnd = messageToExecute.mMessageVector[paramStartPos].find(',', posStart);
+                posEnd = messageToExecute.mMessageTokens[paramStartPos].find(',', posStart);
             }
             // add last channel to channelNames vector
             {
-                std::string channelName = messageToExecute.mMessageVector[paramStartPos].substr(posStart, posEnd);
+                std::string channelName = messageToExecute.mMessageTokens[paramStartPos].substr(posStart, posEnd);
                 if (channelName.length() == 0)
                 {
                     Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
-                    errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-                    errMessageToClient.mMessageVector.push_back("Channel name is empty");
+                    errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                    errMessageToClient.mMessageTokens.push_back("Channel name is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
@@ -632,8 +698,8 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
                 {
                     Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
-                    errMessageToClient.mMessageVector.push_back(ERR_NOSUCHCHANNEL);
-                    errMessageToClient.mMessageVector.push_back("Channel name is too long");
+                    errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                    errMessageToClient.mMessageTokens.push_back("Channel name is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
@@ -652,26 +718,26 @@ void Server::executeParsedMessages(ClientData* clientData)
             else
             {
                 Logger::log(WARNING, "No channel names, sending ERR_NEEDMOREPARAMS");
-                errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-                errMessageToClient.mMessageVector.push_back("No channel names");
+                errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back("No channel names");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
                 return;
             }
             // if there is key parameter, add it to channelKeys Vector
-            if (messageToExecute.mMessageVector.size() == paramStartPos + 2)
+            if (messageToExecute.mMessageTokens.size() == paramStartPos + 2)
             {
                 Logger::log(DEBUG, "Parsing channel keys");
                 posStart = 0;
-                posEnd = messageToExecute.mMessageVector[paramStartPos + 1].find(',');
+                posEnd = messageToExecute.mMessageTokens[paramStartPos + 1].find(',');
                 while (posEnd != std::string::npos)
                 {
-                    std::string channelKey = messageToExecute.mMessageVector[paramStartPos + 1].substr(posStart, posEnd);
+                    std::string channelKey = messageToExecute.mMessageTokens[paramStartPos + 1].substr(posStart, posEnd);
                     if (channelKey.length() == 0)
                     {
                         Logger::log(ERROR, "Channel key is empty, sending ERR_NEEDMOREPARAMS");
-                        errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-                        errMessageToClient.mMessageVector.push_back("Channel key is empty");
+                        errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                        errMessageToClient.mMessageTokens.push_back("Channel key is empty");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         Server::logClientData(clientData);
                         return;
@@ -679,22 +745,22 @@ void Server::executeParsedMessages(ClientData* clientData)
                     else if (channelKey.length() > MAX_CHANNEL_KEY_LENGTH)
                     {
                         Logger::log(ERROR, "Channel key is too long, sending ERR_BADCHANNELKEY");
-                        errMessageToClient.mMessageVector.push_back(ERR_BADCHANNELKEY);
-                        errMessageToClient.mMessageVector.push_back("Channel key is too long");
+                        errMessageToClient.mMessageTokens.push_back(ERR_BADCHANNELKEY);
+                        errMessageToClient.mMessageTokens.push_back("Channel key is too long");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         Server::logClientData(clientData);
                         return;
                     }
                     channelKeys.push_back(channelKey);
                     posStart = posEnd + 1;
-                    posEnd = messageToExecute.mMessageVector[paramStartPos + 1].find(',', posStart);
+                    posEnd = messageToExecute.mMessageTokens[paramStartPos + 1].find(',', posStart);
                 }
-                std::string channelKey = messageToExecute.mMessageVector[paramStartPos + 1].substr(posStart, posEnd);
+                std::string channelKey = messageToExecute.mMessageTokens[paramStartPos + 1].substr(posStart, posEnd);
                 if (channelKey.length() == 0)
                 {
                     Logger::log(ERROR, "Channel key is empty, sending ERR_NEEDMOREPARAMS");
-                    errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-                    errMessageToClient.mMessageVector.push_back("Channel key is empty");
+                    errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                    errMessageToClient.mMessageTokens.push_back("Channel key is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
@@ -702,8 +768,8 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelKey.length() > MAX_CHANNEL_KEY_LENGTH)
                 {
                     Logger::log(ERROR, "Channel key is too long, sending ERR_BADCHANNELKEY");
-                    errMessageToClient.mMessageVector.push_back(ERR_BADCHANNELKEY);
-                    errMessageToClient.mMessageVector.push_back("Channel key is too long");
+                    errMessageToClient.mMessageTokens.push_back(ERR_BADCHANNELKEY);
+                    errMessageToClient.mMessageTokens.push_back("Channel key is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
@@ -739,7 +805,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     Logger::log(DEBUG, "Channel " + channelNames[i] + " has no key");
                 }
 
-                globalChannelIter = mNameToChannelGlobalMap.find(messageToExecute.mMessageVector[paramStartPos]);
+                globalChannelIter = mNameToChannelGlobalMap.find(messageToExecute.mMessageTokens[paramStartPos]);
                 if (globalChannelIter == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(DEBUG, "Channel not found, creating new channel");
@@ -767,8 +833,8 @@ void Server::executeParsedMessages(ClientData* clientData)
                     if (channel->getNickToClientDataMap().find(clientData->getClientNickname()) != channel->getNickToClientDataMap().end())
                     {
                         Logger::log(ERROR, "Client is already in the channel, sending ERR_ALREADYINCHANNEL");
-                        errMessageToClient.mMessageVector.push_back(ERR_ALREADYINCHANNEL);
-                        errMessageToClient.mMessageVector.push_back("Client is already in the channel");
+                        errMessageToClient.mMessageTokens.push_back(ERR_ALREADYINCHANNEL);
+                        errMessageToClient.mMessageTokens.push_back("Client is already in the channel");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         return;
                     }
@@ -780,10 +846,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                             connectClientDataWithChannel(clientData, channel, channelKeys[i]);
 
                             successMessageToClient.mCommand = NONE;
-                            successMessageToClient.mMessageVector.clear();
-                            successMessageToClient.mMessageVector.push_back(RPL_TOPIC);
-                            successMessageToClient.mMessageVector.push_back(channel->getName());
-                            successMessageToClient.mMessageVector.push_back(channel->getTopic());
+                            successMessageToClient.mMessageTokens.clear();
+                            successMessageToClient.mMessageTokens.push_back(RPL_TOPIC);
+                            successMessageToClient.mMessageTokens.push_back(channel->getName());
+                            successMessageToClient.mMessageTokens.push_back(channel->getTopic());
                             clientData->getServerToClientSendQueue().push(successMessageToClient);
                             Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + channel->getName() + " with password");
                             Server::logClientData(clientData);
@@ -792,8 +858,8 @@ void Server::executeParsedMessages(ClientData* clientData)
                         else
                         {
                             Logger::log(WARNING, "Invalid password, sending ERR_BADCHANNELKEY");
-                            errMessageToClient.mMessageVector.push_back(ERR_BADCHANNELKEY);
-                            errMessageToClient.mMessageVector.push_back("Invalid password");
+                            errMessageToClient.mMessageTokens.push_back(ERR_BADCHANNELKEY);
+                            errMessageToClient.mMessageTokens.push_back("Invalid password");
                             clientData->getServerToClientSendQueue().push(errMessageToClient);
                             continue;
                         }
@@ -802,10 +868,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     connectClientDataWithChannel(clientData, channel);
 
                     successMessageToClient.mCommand = NONE;
-                    successMessageToClient.mMessageVector.clear();
-                    successMessageToClient.mMessageVector.push_back(RPL_TOPIC);
-                    successMessageToClient.mMessageVector.push_back(channel->getName());
-                    successMessageToClient.mMessageVector.push_back(channel->getTopic());
+                    successMessageToClient.mMessageTokens.clear();
+                    successMessageToClient.mMessageTokens.push_back(RPL_TOPIC);
+                    successMessageToClient.mMessageTokens.push_back(channel->getName());
+                    successMessageToClient.mMessageTokens.push_back(channel->getTopic());
                     clientData->getServerToClientSendQueue().push(successMessageToClient);
 
                     Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + channel->getName());
@@ -955,12 +1021,12 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         while (tokenEndPos != std::string::npos)
         {
             token = messageStr.substr(tokenStartPos, tokenEndPos - tokenStartPos);
-            messageToExecute.mMessageVector.push_back(token);
+            messageToExecute.mMessageTokens.push_back(token);
             tokenStartPos = tokenEndPos + 1;
             tokenEndPos = messageStr.find(' ', tokenStartPos);
         }
         token = messageStr.substr(tokenStartPos, messageStr.length() - tokenStartPos);
-        messageToExecute.mMessageVector.push_back(token);
+        messageToExecute.mMessageTokens.push_back(token);
 
         // set clientData's receivedString
         str.erase(startPos, endPos - startPos + 2);
@@ -970,28 +1036,28 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     }
 
     // check if the messageToExecute has prefix, it's always a NICKNAME
-    if (messageToExecute.mMessageVector[0][0] == ':')
+    if (messageToExecute.mMessageTokens[0][0] == ':')
     {
         // checking Nickname's validity
-        if (messageToExecute.mMessageVector[0].length() < 2)
+        if (messageToExecute.mMessageTokens[0].length() < 2)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
             Logger::log(WARNING, "Sending ERR_UNKNOWNCOMMAND");
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_UNKNOWNCOMMAND);
-            errMessageToClient.mMessageVector.push_back("Unknown command");
+            errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
+            errMessageToClient.mMessageTokens.push_back("Unknown command");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
             return false;
         }
-        std::string nick = messageToExecute.mMessageVector[0].substr(1, messageToExecute.mMessageVector[0].length() - 1);
+        std::string nick = messageToExecute.mMessageTokens[0].substr(1, messageToExecute.mMessageTokens[0].length() - 1);
         if (mNickToClientGlobalMap.find(nick) != mNickToClientGlobalMap.end())
         {
             Logger::log(WARNING, "Nickname collision, sending ERR_NICKCOLLISION");
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NICKCOLLISION);
-            errMessageToClient.mMessageVector.push_back("Nickname collision");
+            errMessageToClient.mMessageTokens.push_back(ERR_NICKCOLLISION);
+            errMessageToClient.mMessageTokens.push_back("Nickname collision");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
             return false;
@@ -1007,25 +1073,25 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         Server::logMessage(messageToExecute);
         Logger::log(WARNING, "Sending ERR_UNKNOWNCOMMAND");
         Message errMessageToClient;
-        errMessageToClient.mMessageVector.push_back(ERR_UNKNOWNCOMMAND);
-        errMessageToClient.mMessageVector.push_back("Unknown command");
+        errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
+        errMessageToClient.mMessageTokens.push_back("Unknown command");
         clientData->getServerToClientSendQueue().push(errMessageToClient);
         // assert(false);
         return false;
     }
 
     // Damn, Should we use map for this?
-    if (messageToExecute.mMessageVector[commandStartPos] == "PASS")
+    if (messageToExecute.mMessageTokens[commandStartPos] == "PASS")
     {
         messageToExecute.mCommand = PASS;
-        if (messageToExecute.mMessageVector.size() != 2)
+        if (messageToExecute.mMessageTokens.size() != 2)
         {
             Logger::log(WARNING, "Invalid messageToExecute, PASS command must have 1 parameter");
             Server::logMessage(messageToExecute);
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-            errMessageToClient.mMessageVector.push_back("PASS");
-            errMessageToClient.mMessageVector.push_back("Not enough parameters");
+            errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+            errMessageToClient.mMessageTokens.push_back("PASS");
+            errMessageToClient.mMessageTokens.push_back("Not enough parameters");
 
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
@@ -1036,62 +1102,32 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         // <number>     ::= '0' ... '9'
         // <special>    ::= '-' | '[' | ']' | '\' | '`' | '^' | '{' | '}'
         // <nonwhite>   ::= <any 8bit code except SPACE (0x20)>
-
-        if (mServerPassword == "" || mServerPassword == messageToExecute.mMessageVector[commandStartPos + 1])
-        {
-            Logger::log(INFO, "Client passed password");
-            Logger::log(DEBUG, "Sending RPL_PASSACCEPTED");
-
-            Message errMessagetoClient;
-            errMessagetoClient.mMessageVector.push_back(RPL_PASSACCEPTED);
-            errMessagetoClient.mMessageVector.push_back("Password accepted");
-
-            clientData->getServerToClientSendQueue().push(errMessagetoClient);
-            clientData->getExecuteMessageQueue().push(messageToExecute);
-            return true;
-        }
-        else if (messageToExecute.mMessageVector[commandStartPos + 1] != mServerPassword)
-        {
-            Logger::log(WARNING, "Invalid password, disconnecting client");
-            Server::logMessage(messageToExecute);
-            Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_PASSWDMISMATCH);
-            errMessageToClient.mMessageVector.push_back("Password Missmatched, disconnecting...");
-
-            delete clientData;
-            mFdToClientGlobalMap.erase(clientFD);
-            close(clientFD);
-            Logger::log(DEBUG, "Client disconnected");
-
-            clientData->getServerToClientSendQueue().push(errMessageToClient);
-            assert(false);
-            return false;
-        }
+        return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "NICK")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "NICK")
     {
-        if (messageToExecute.mMessageVector.size() == commandStartPos)
+        if (messageToExecute.mMessageTokens.size() == commandStartPos)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-            errMessageToClient.mMessageVector.push_back("NICK");
-            errMessageToClient.mMessageVector.push_back("Not enough parameters");
+            errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+            errMessageToClient.mMessageTokens.push_back("NICK");
+            errMessageToClient.mMessageTokens.push_back("Not enough parameters");
 
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
             return false;
         }
         std::map<std::string, ClientData*>::iterator nickIter;
-        nickIter = mNickToClientGlobalMap.find(messageToExecute.mMessageVector[commandStartPos + 1]);
+        nickIter = mNickToClientGlobalMap.find(messageToExecute.mMessageTokens[commandStartPos + 1]);
         if (nickIter != mNickToClientGlobalMap.end())
         {
             Logger::log(WARNING, "Nickname collision, sending ERR_NICKCOLLISION");
             Server::logMessage(messageToExecute);
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NICKCOLLISION);
-            errMessageToClient.mMessageVector.push_back("Nickname collision");
+            errMessageToClient.mMessageTokens.push_back(ERR_NICKCOLLISION);
+            errMessageToClient.mMessageTokens.push_back("Nickname collision");
 
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
@@ -1101,16 +1137,16 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "USER")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "USER")
     {
-        if (messageToExecute.mMessageVector.size() != 5)
+        if (messageToExecute.mMessageTokens.size() != 5)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-            errMessageToClient.mMessageVector.push_back("USER");
-            errMessageToClient.mMessageVector.push_back("Not enough parameters");
+            errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+            errMessageToClient.mMessageTokens.push_back("USER");
+            errMessageToClient.mMessageTokens.push_back("Not enough parameters");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
             return false;
@@ -1123,8 +1159,8 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
             Server::logMessage(messageToExecute);
             // send ERR_ALREADYREGISTRED
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_ALREADYREGISTRED);
-            errMessageToClient.mMessageVector.push_back("User is already registered");
+            errMessageToClient.mMessageTokens.push_back(ERR_ALREADYREGISTRED);
+            errMessageToClient.mMessageTokens.push_back("User is already registered");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
             return false;
@@ -1133,16 +1169,16 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "JOIN")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "JOIN")
     {
-        if (messageToExecute.mMessageVector.size() == commandStartPos)
+        if (messageToExecute.mMessageTokens.size() == commandStartPos)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-            errMessageToClient.mMessageVector.push_back("JOIN");
-            errMessageToClient.mMessageVector.push_back("Not enough parameters");
+            errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+            errMessageToClient.mMessageTokens.push_back("JOIN");
+            errMessageToClient.mMessageTokens.push_back("Not enough parameters");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             // assert(false);
             return false;
@@ -1153,30 +1189,30 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         return true;
     }
     // args : <channel>{,<channel>} [<key>{,<key>}]
-    else if (messageToExecute.mMessageVector[commandStartPos] == "PART")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "PART")
     {
-        if (messageToExecute.mMessageVector.size() == commandStartPos)
+        if (messageToExecute.mMessageTokens.size() == commandStartPos)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-            errMessageToClient.mMessageVector.push_back("PART");
-            errMessageToClient.mMessageVector.push_back("Not enough parameters");
+            errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+            errMessageToClient.mMessageTokens.push_back("PART");
+            errMessageToClient.mMessageTokens.push_back("Not enough parameters");
 
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
             return false;
         }
 
-        if (messageToExecute.mMessageVector[1] == "")
+        if (messageToExecute.mMessageTokens[1] == "")
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
             Message errMessageToClient;
-            errMessageToClient.mMessageVector.push_back(ERR_NEEDMOREPARAMS);
-            errMessageToClient.mMessageVector.push_back("PART");
-            errMessageToClient.mMessageVector.push_back("Not enough parameters");
+            errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+            errMessageToClient.mMessageTokens.push_back("PART");
+            errMessageToClient.mMessageTokens.push_back("Not enough parameters");
 
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
@@ -1187,55 +1223,55 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "PRIVMSG")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "PRIVMSG")
     {
         messageToExecute.mCommand = PRIVMSG;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "PING")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "PING")
     {
         messageToExecute.mCommand = PING;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "PONG")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "PONG")
     {
         messageToExecute.mCommand = PONG;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "QUIT")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "QUIT")
     {
         messageToExecute.mCommand = QUIT;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "KICK")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "KICK")
     {
         messageToExecute.mCommand = KICK;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "INVITE")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "INVITE")
     {
         messageToExecute.mCommand = INVITE;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "TOPIC")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "TOPIC")
     {
         messageToExecute.mCommand = TOPIC;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "MODE")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "MODE")
     {
         messageToExecute.mCommand = MODE;
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageVector[commandStartPos] == "NOTICE")
+    else if (messageToExecute.mMessageTokens[commandStartPos] == "NOTICE")
     {
         messageToExecute.mCommand = NOTICE;
         clientData->getExecuteMessageQueue().push(messageToExecute);
@@ -1245,8 +1281,8 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     {
         Logger::log(ERROR, "Invalid command, sending ERR_UNKNOWNCOMMAND");
         Message errMessageToClient;
-        errMessageToClient.mMessageVector.push_back(ERR_UNKNOWNCOMMAND);
-        errMessageToClient.mMessageVector.push_back("Unknown command");
+        errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
+        errMessageToClient.mMessageTokens.push_back("Unknown command");
         clientData->getServerToClientSendQueue().push(errMessageToClient);
         // assert(false);
         return false;
@@ -1271,28 +1307,28 @@ bool Server::isValidMessage(const Message& message) const
     if (message.mHasPrefix)
         i++;
 
-    if (message.mMessageVector.size() == 0)
+    if (message.mMessageTokens.size() == 0)
         return false;
-    if (message.mMessageVector[0].length() == 0)
+    if (message.mMessageTokens[0].length() == 0)
         return false;
     // for EXCEPTIONAL CASE : if the message has prefix, the first string must be NICKNAME
     // We know it's not a good way to implement, whatever.
     if (message.mHasPrefix)
     {
-        if (message.mMessageVector[0].length() < 2)
+        if (message.mMessageTokens[0].length() < 2)
             return false;
     }
-    while (i < message.mMessageVector.size())
+    while (i < message.mMessageTokens.size())
     {
-        if (message.mMessageVector[i].length() == 0)
+        if (message.mMessageTokens[i].length() == 0)
             return false;
-        if (message.mMessageVector[i][0] == ':')
+        if (message.mMessageTokens[i][0] == ':')
             return false;
-        if (message.mMessageVector[i].length() > MAX_MESSAGE_LENGTH)
+        if (message.mMessageTokens[i].length() > MAX_MESSAGE_LENGTH)
             return false;
-        for (size_t j = 0; j < message.mMessageVector[i].length(); j++)
+        for (size_t j = 0; j < message.mMessageTokens[i].length(); j++)
         {
-            if (!isValidParameter(message.mMessageVector[i][j]))
+            if (!isValidParameter(message.mMessageTokens[i][j]))
                 return false;
         }
         i++;
@@ -1381,9 +1417,9 @@ void Server::logMessage(const Message& message) const
     Logger::log(DEBUG, "Command : " + ValToString(message.mCommand));
     Logger::log(DEBUG, "Has Prefix : " + ValToString(message.mHasPrefix));
     Logger::log(DEBUG, "Message Vector : ");
-    for (size_t i = 0; i < message.mMessageVector.size(); i++)
+    for (size_t i = 0; i < message.mMessageTokens.size(); i++)
     {
-        Logger::log(DEBUG, message.mMessageVector[i]);
+        Logger::log(DEBUG, message.mMessageTokens[i]);
     }
     Logger::log(DEBUG, "================== End of Message ==================");
 }

@@ -30,5 +30,5 @@ struct Message
 
     Command mCommand;
     // TODO : check parameter's max size
-    std::vector <std::string> mMessageVector;
+    std::vector <std::string> mMessageTokens;
 };
