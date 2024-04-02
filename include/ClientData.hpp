@@ -26,6 +26,9 @@ private:
 
 
 public: // getter, setters
+    void setIsRegistered(bool isRegistered) { mIsRegistered = isRegistered; };
+    const bool& getIsRegistered() const { return mIsRegistered; };
+
     const sockaddr_in& getClientAddress() const { return mClientAddress; };
 
     const std::string& getClientNickname() const { return mClientNickname; };
@@ -35,7 +38,7 @@ public: // getter, setters
     void setLastMessageTime(time_t& time) { lastMessageTime = time; };
 
     const time_t& getLastPingTime() const { return lastPingTime; };
-    void setLastPingTime(time_t& time) { lastPingTime = time; };
+    void setLastPingTime(time_t time) { lastPingTime = time; };
 
     std::string& getReceivedString(void) { return mReceivedString; };
     void setReceivedString(const std::string& recvStr) { mReceivedString = recvStr; };
@@ -96,6 +99,8 @@ private:
 
     // send queue, first vector is the command, least are the params
     std::queue <Message>  mServerToClientSendQueue;
+
+    bool mIsRegistered;
 
 private:
     std::string mReceivedString;

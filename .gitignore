@@ -33,6 +33,7 @@
 
 ircserv
 *.log
+*.txt
 
 LICENSE
 .vscode

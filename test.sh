@@ -7,11 +7,14 @@ run_irc_server() {
 
 # 테스트 메시지
 TEST[0]='PASS 1234'
-TEST[1]='NICK client'
-TEST[2]='USER client 0 * :realname'
-TEST[3]='JOIN #test'
-TEST[4]='PRIVMSG #test :Hello, server!'
-TEST[5]='QUIT'
+TEST[1]='NICK hae'
+TEST[2]='USER haeLoginName 0 * :haeRealname'
+TEST[3]='JOIN #haeChannel channelPassword'
+TEST[4]='MODE #haeChannel +sn'
+TEST[5]='TOPIC #haeChannel :For test!'
+TEST[6]='PRIVMSG #haeChannel :Hello,server!'
+TEST[7]='PART #haeChannel :Bye,server!'
+TEST[8]='QUIT'
 
 # 서버 실행
 run_irc_server
@@ -30,7 +33,7 @@ SERVER_PORT="6667"
     for i in {0..5}
     do
         printf "%s\r\n" "${TEST[$i]}"
-        sleep 1
+        sleep 1                                                                                                                                                                                                                                                        
     done
     ) | nc $SERVER_IP $SERVER_PORT | cat > IrcClient.log
 

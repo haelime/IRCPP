@@ -30,7 +30,7 @@ int main (int argc, char **argv)
     SignalHandler::setSignals(server);
     Logger::setConsoleLogging(true);
     Logger::setFileLogging("IrcServer.log");
-    Logger::setLogLevel(DEBUG | INFO | WARNING | ERROR | FATAL | DEFAULT);
+    Logger::setLogLevel(INFO | WARNING | ERROR | FATAL | DEFAULT | DEBUG);
 
     if (server.initServer(argc, argv) == false)
     {

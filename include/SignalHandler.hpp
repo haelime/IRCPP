@@ -27,6 +27,3 @@ private:
 
     static Server *mServer;
 };
-
-
-
