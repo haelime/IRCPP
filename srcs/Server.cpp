@@ -1027,38 +1027,48 @@ void Server::executeParsedMessages(ClientData* clientData)
             clientData->setLastPingTime(time(NULL));
 
             break;
-
+//[ ]: defalt msg : nickname
+//     if given parameter : <Quit message>
         case QUIT:
             // disconnect client
             Logger::log(DEBUG, "executing QUIT command from");
             Server::logClientData(clientData);
 
-            // send QUIT message to all channels
+            // one client's send QUIT message to all channels
             for (std::map<std::string, Channel*>::iterator channelIter = clientData->getConnectedChannels().begin(); channelIter != clientData->getConnectedChannels().end(); channelIter++)
             {
-                Channel* channel = (*channelIter).second;
+                Channel* channel = channelIter->second;
                 Message quitMessageToChannel;
                 quitMessageToChannel.mCommand = QUIT;
                 quitMessageToChannel.mMessageTokens.push_back("QUIT");
-                quitMessageToChannel.mMessageTokens.push_back(clientData->getClientNickname() + " has quit");
+                quitMessageToChannel.mMessageTokens.push_back(clientData->getClientNickname());
                 for (std::map<std::string, ClientData*>::iterator nickIter = channel->getNickToClientDataMap().begin(); nickIter != channel->getNickToClientDataMap().end(); nickIter++)
                 {
                     ClientData* clientInChannel = (*nickIter).second;
                     clientInChannel->getExecuteMessageQueue().push(quitMessageToChannel);
                 }
             }
-            // send QUIT message to all clients
-            for (std::map<SOCKET_FD, ClientData*>::iterator clientIter = mFdToClientGlobalMap.begin(); clientIter != mFdToClientGlobalMap.end(); clientIter++)
-            {
-                ClientData* client = (*clientIter).second;
-                Message quitMessageToClient;
-                quitMessageToClient.mCommand = QUIT;
-                quitMessageToClient.mMessageTokens.push_back("QUIT");
-                quitMessageToClient.mMessageTokens.push_back(clientData->getClientNickname() + " has quit");
-                client->getExecuteMessageQueue().push(quitMessageToClient);
-            }
+        /**
+         * prefix...?있어야해?
+        - 클라이언트가 가지고 있는 모든 채널 나가야함.
+        - 채널에 클라이언트가 없을 경우 채널을 삭제.
+        - 클라이언트 자체도 삭제.
+
+        ** /user /pass /nick을 제외한 나머지 명령어는 굳이 반응할 필요없음**
+        */
 
             break;
+
+        /**
+         * pares에서 parameter (Quit message)가 있는지 파악필요.
+         * isparameter == true: send <Quit message>
+         *             == flase: <client nickname>
+         * clien: seok
+         * QUIT bye~
+         * -> bye~
+         * QUIT
+         * -> Quit seok
+        */
         case KICK:
 
             //             Command: KICK
@@ -1588,6 +1598,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
+    // [ ] : Do the parse?
     else if (messageToExecute.mMessageTokens[commandStartPos] == "QUIT")
     {
         messageToExecute.mCommand = QUIT;
