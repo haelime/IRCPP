@@ -50,7 +50,26 @@ typedef std::string ERROR_NUM_STRING;
 #define ERR_NOCHANMODES "477"
 #define ERR_CHANOPRIVSNEEDED "482"
 
+// 001    RPL_WELCOME
+//         "Welcome to the Internet Relay Network
+//         <nick>!<user>@<host>"
+// 002    RPL_YOURHOST
+//         "Your host is <servername>, running version <ver>"
+// 003    RPL_CREATED
+//         "This server was created <date>"
+// 004    RPL_MYINFO
+//         "<servername> <version> <available user modes>
+//         <available channel modes>"
+
+//     - The server sends Replies 001 to 004 to a user upon
+//     successful registration.
+
+
+// 005    RPL_BOUNCE
+//         "Try server <server name>, port <port number>"
+
 #define RPL_PASSACCEPTED "001"
+#define RPL_NICKACCEPTED "002"
 #define RPL_TOPIC "332"
 #define RPL_NOTOPIC "331"
 #define RPL_NAMREPLY "353"

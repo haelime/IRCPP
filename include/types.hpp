@@ -12,8 +12,6 @@ enum Command
     JOIN,
     PART,
     PRIVMSG,
-    PING,
-    PONG,
     QUIT,
     KICK,
     INVITE,
@@ -28,6 +26,7 @@ struct Message
     
     bool mHasPrefix;
 
+    // switch case hint for optimization
     Command mCommand;
     // TODO : check parameter's max size
     std::vector <std::string> mMessageTokens;

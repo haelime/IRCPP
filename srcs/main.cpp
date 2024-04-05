@@ -28,9 +28,9 @@ int main (int argc, char **argv)
     Server server;
 
     SignalHandler::setSignals(server);
-    Logger::setConsoleLogging(true);
+    Logger::setConsoleLogging(true); 
     Logger::setFileLogging("IrcServer.log");
-    Logger::setLogLevel(INFO | WARNING | ERROR | FATAL | DEFAULT | DEBUG);
+    Logger::setLogLevel(INFO | WARNING | ERROR | FATAL | DEFAULT);
 
     if (server.initServer(argc, argv) == false)
     {

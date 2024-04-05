@@ -263,8 +263,7 @@ void Server::run()
                     Logger::log(DEBUG, "Finding clientData object");
 
                     // Find the clientData
-                    // TODO: Change to find() instead of operator[] for preventing creating new ClientData object when not found
-                    ClientData* clientData = mFdToClientGlobalMap[filteredEvents[i].ident];
+                    ClientData* clientData = mFdToClientGlobalMap.find(filteredEvents[i].ident)->second;
                     if (clientData == NULL)
                     {
                         Logger::log(ERROR, "ClientData not found, closing socket");
@@ -327,7 +326,7 @@ void Server::run()
 
                 std::map<SOCKET_FD, ClientData*>::const_iterator clientDataIter = mFdToClientGlobalMap.find(clientFD);
 
-                ClientData* clientData = (*clientDataIter).second;
+                ClientData* clientData = clientDataIter->second;
                 if (clientData == NULL)
                 {
                     Logger::log(ERROR, "ClientData not found, closing socket");
@@ -339,7 +338,7 @@ void Server::run()
 
                 // Make message to send from message tokens
                 // :<Server Name> <Message> \r\n
-                std::string sendMsg = ":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)) + " ";
+                std::string sendMsg = ":" + std::string(inet_ntoa(mServerAddress.sin_addr)) + " ";
                 if (clientData->getServerToClientSendQueue().empty())
                 {
                     // Logger::log(ERROR, "ServerToClientSendQueue is empty, ignore sending message");
@@ -422,7 +421,7 @@ void Server::run()
                     continue;
                 }
 
-                ClientData* clientData = (*clientDataIter).second;
+                ClientData* clientData = clientDataIter->second;
                 while (parseReceivedRequestFromClientData(clientFD) == true)
                 {
                     Logger::log(DEBUG, "Message parsed successfully");
@@ -472,6 +471,7 @@ void Server::executeParsedMessages(ClientData* clientData)
             paramStartPos++;
         }
 
+        // TODO: move these to somewhere below
         Message errMessageToClient;
         Message successMessageToClient;
         std::vector <std::string> channelNames;
@@ -513,6 +513,9 @@ void Server::executeParsedMessages(ClientData* clientData)
                 successMessageToClient.mMessageTokens.push_back("AUTH");
                 successMessageToClient.mMessageTokens.push_back(":*** Looking up your hostname...");
                 clientData->getServerToClientSendQueue().push(successMessageToClient);
+                clientData->setIsRegistered(true);
+                clientData->setLastPingTime(time(NULL));
+
                 break;
             }
             else
@@ -533,19 +536,6 @@ void Server::executeParsedMessages(ClientData* clientData)
                 break;
             }
 
-            Logger::log(INFO, "Client Successfully sent PASS command and authenticated");
-
-            successMessageToClient.mCommand = NOTICE;
-            successMessageToClient.mMessageTokens.clear();
-            successMessageToClient.mMessageTokens.push_back("NOTICE");
-            successMessageToClient.mMessageTokens.push_back("AUTH");
-            successMessageToClient.mMessageTokens.push_back(":*** Looking up your hostname...");
-            clientData->getServerToClientSendQueue().push(successMessageToClient);
-            clientData->setIsRegistered(true);
-            clientData->setLastPingTime(time(NULL));
-
-            break;
-
         case NICK:
 
             //  If the server recieves an identical NICK from a client which is
@@ -555,8 +545,9 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             successMessageToClient.mCommand = NONE;
             successMessageToClient.mMessageTokens.clear();
-            successMessageToClient.mMessageTokens.push_back(RPL_PASSACCEPTED);
-            successMessageToClient.mMessageTokens.push_back("Password accepted");
+
+            successMessageToClient.mMessageTokens.push_back(RPL_NICKACCEPTED);
+            successMessageToClient.mMessageTokens.push_back("Nickname accepted");
             clientData->getServerToClientSendQueue().push(successMessageToClient);
 
             clientData->setClientNickname(messageToExecute.mMessageTokens[paramStartPos]);
@@ -592,9 +583,8 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             successMessageToClient.mCommand = NONE;
             successMessageToClient.mMessageTokens.clear();
-            successMessageToClient.mMessageTokens.push_back(RPL_PASSACCEPTED);
-            successMessageToClient.mMessageTokens.push_back("Password accepted");
-            clientData->getServerToClientSendQueue().push(successMessageToClient);
+            // TODO : send correct RPL
+            // clientData->getServerToClientSendQueue().push(successMessageToClient);
 
             clientData->setUsername(messageToExecute.mMessageTokens[paramStartPos]);
             clientData->setHostname(messageToExecute.mMessageTokens[paramStartPos + 1]);
@@ -800,6 +790,7 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             Logger::log(DEBUG, "Adding client to channels");
 
+            // TODO: Fix logic
             for (size_t i = 0; i < channelNames.size(); i++)
             {
                 if (channelKeys.size() > i && channelKeys[i].length() > 0)
@@ -834,7 +825,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else
                 {
                     Channel* channel = (*globalChannelIter).second;
-                    if (channel->getIsInviteOnly())
+                    if (channel->getIsInviteOnly() == true)
                     {
                         Logger::log(ERROR, "Channel is invite only, sending ERR_INVITEONLYCHAN");
                         errMessageToClient.mMessageTokens.push_back(ERR_INVITEONLYCHAN);
@@ -852,7 +843,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                         return;
                     }
 
-                    if (channel->getPassword().length() > 0)
+                    if (!channel->getPassword().empty())
                     {
                         if (channelKeys.size() > i && channelKeys[i] == channel->getPassword())
                         {
@@ -968,6 +959,7 @@ void Server::executeParsedMessages(ClientData* clientData)
             for (size_t i = 0;i < channelNames.size(); i++)
             {
                 clientData->getConnectedChannels().find(channelNames[i])->second->getNickToClientDataMap().erase(clientData->getClientNickname());
+                // TODO: check leak
                 if (clientData->getConnectedChannels().find(channelNames[i])->second->getNickToClientDataMap().empty())
                 {
                     mNameToChannelGlobalMap.erase(channelNames[i]);
@@ -1000,34 +992,6 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             break;
 
-        case PING:
-            // send back exact same message
-            Logger::log(DEBUG, "executing PING command from");
-            Server::logClientData(clientData);
-
-            successMessageToClient.mCommand = PONG;
-            successMessageToClient.mMessageTokens.clear();
-            successMessageToClient.mMessageTokens.push_back("PONG");
-            successMessageToClient.mMessageTokens.push_back(messageToExecute.mMessageTokens[paramStartPos]);
-            clientData->getServerToClientSendQueue().push(successMessageToClient);
-            clientData->setLastPingTime(time(NULL));
-
-            break;
-
-        case PONG:
-            // send back exact same message
-            Logger::log(DEBUG, "executing PONG command from");
-            Server::logClientData(clientData);
-
-            successMessageToClient.mCommand = NONE;
-            successMessageToClient.mMessageTokens.clear();
-            successMessageToClient.mMessageTokens.push_back("PONG");
-            successMessageToClient.mMessageTokens.push_back(messageToExecute.mMessageTokens[paramStartPos]);
-            clientData->getServerToClientSendQueue().push(successMessageToClient);
-            clientData->setLastPingTime(time(NULL));
-
-            break;
-
         case QUIT:
             // disconnect client
             Logger::log(DEBUG, "executing QUIT command from");
@@ -1057,6 +1021,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 quitMessageToClient.mMessageTokens.push_back(clientData->getClientNickname() + " has quit");
                 client->getExecuteMessageQueue().push(quitMessageToClient);
             }
+            // TODO: delete things and close socket
 
             break;
         case KICK:
@@ -1280,7 +1245,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         // assert(false);
         return false;
     }
-    ClientData* clientData = (*clientDataIter).second;
+    ClientData* clientData = clientDataIter->second;
 
 
     // should erase and setReceivedString() if the message has been parsed
@@ -1396,6 +1361,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     if (messageToExecute.mMessageTokens[commandStartPos] == "PASS")
     {
         messageToExecute.mCommand = PASS;
+        // TODO : ./ircserv 6667 "" to test this
         if (messageToExecute.mMessageTokens.size() != 2)
         {
             Logger::log(WARNING, "Invalid messageToExecute, PASS command must have 1 parameter");
@@ -1453,7 +1419,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     }
     else if (messageToExecute.mMessageTokens[commandStartPos] == "NICK")
     {
-        if (messageToExecute.mMessageTokens.size() == commandStartPos)
+        if (messageToExecute.mMessageTokens.size() == commandStartPos + 1)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
@@ -1499,15 +1465,14 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
             return false;
         }
 
-        // check if the user is already registered
+        // check if the user input is valid
         if (clientData->getUsername().length() != 0 || clientData->getHostname().length() != 0 || clientData->getServername().length() != 0 || clientData->getRealname().length() != 0)
         {
-            Logger::log(WARNING, "User is already registered, sending ERR_ALREADYREGISTRED");
+            Logger::log(WARNING, "User input is invalid, sending ERROR");
             Server::logMessage(messageToExecute);
             // send ERR_ALREADYREGISTRED
             Message errMessageToClient;
-            errMessageToClient.mMessageTokens.push_back(ERR_ALREADYREGISTRED);
-            errMessageToClient.mMessageTokens.push_back("User is already registered");
+            errMessageToClient.mMessageTokens.push_back("Ivalid user input");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             assert(false);
             return false;
@@ -1518,7 +1483,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     }
     else if (messageToExecute.mMessageTokens[commandStartPos] == "JOIN")
     {
-        if (messageToExecute.mMessageTokens.size() == commandStartPos)
+        if (messageToExecute.mMessageTokens.size() == commandStartPos + 1)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
@@ -1538,7 +1503,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     // args : <channel>{,<channel>} [<key>{,<key>}]
     else if (messageToExecute.mMessageTokens[commandStartPos] == "PART")
     {
-        if (messageToExecute.mMessageTokens.size() == commandStartPos)
+        if (messageToExecute.mMessageTokens.size() == commandStartPos + 1)
         {
             Logger::log(WARNING, "Invalid messageToExecute");
             Server::logMessage(messageToExecute);
@@ -1576,18 +1541,18 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
-    else if (messageToExecute.mMessageTokens[commandStartPos] == "PING")
-    {
-        messageToExecute.mCommand = PING;
-        clientData->getExecuteMessageQueue().push(messageToExecute);
-        return true;
-    }
-    else if (messageToExecute.mMessageTokens[commandStartPos] == "PONG")
-    {
-        messageToExecute.mCommand = PONG;
-        clientData->getExecuteMessageQueue().push(messageToExecute);
-        return true;
-    }
+    // else if (messageToExecute.mMessageTokens[commandStartPos] == "PING")
+    // {
+    //     messageToExecute.mCommand = PING;
+    //     clientData->getExecuteMessageQueue().push(messageToExecute);
+    //     return true;
+    // }
+    // else if (messageToExecute.mMessageTokens[commandStartPos] == "PONG")
+    // {
+    //     messageToExecute.mCommand = PONG;
+    //     clientData->getExecuteMessageQueue().push(messageToExecute);
+    //     return true;
+    // }
     else if (messageToExecute.mMessageTokens[commandStartPos] == "QUIT")
     {
         messageToExecute.mCommand = QUIT;
@@ -1754,6 +1719,8 @@ void Server::connectClientDataWithChannel(ClientData* clientData, Channel* chann
         // add channel to clientData
         clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
     }
+    else
+        assert(false);
 }
 
 void Server::logMessage(const Message& message) const
