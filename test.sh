@@ -12,9 +12,10 @@ TEST[2]='USER haeLoginName 0 * :haeRealname'
 TEST[3]='JOIN #haeChannel channelPassword'
 TEST[4]='MODE #haeChannel +sn'
 TEST[5]='TOPIC #haeChannel :For test!'
-TEST[6]='PRIVMSG #haeChannel :Hello,server!'
-TEST[7]='PART #haeChannel :Bye,server!'
-TEST[8]='QUIT'
+TEST[6]='PRIVMSG #haeChannel :Hello, server!'
+TEST[7]='PART #haeChannel :Bye, channel!'
+TEST[8]='QUIT awsd :Bye,server!'
+TEST[9]='PRIVATE hae :AM I STILL HERE?'
 
 # 서버 실행
 run_irc_server
@@ -30,7 +31,8 @@ SERVER_PORT="6667"
 
 # 테스트 메시지 전송
 (
-    for i in {0..5}
+    # to every test message
+    for ((i=0; i<${#TEST[@]}; i++))
     do
         printf "%s\r\n" "${TEST[$i]}"
         sleep 1                                                                                                                                                                                                                                                        
