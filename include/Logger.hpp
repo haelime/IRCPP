@@ -35,12 +35,16 @@ typedef unsigned int LogLevel;
 #define WARNING (8)
 #define ERROR   (16)
 #define FATAL   (32)
+#define SEND    (64)
+#define RECV    (128)
 
 #define LOG_DEBUG(logMessage) Logger::log(DEBUG, logMessage)
 #define LOG_INFO(logMessage) Logger::log(INFO, logMessage)
 #define LOG_WARNING(logMessage) Logger::log(WARNING, logMessage)
 #define LOG_ERROR(logMessage) Logger::log(ERROR, logMessage)
 #define LOG_FATAL(logMessage) Logger::log(FATAL, logMessage)
+#define LOG_SEND(logMessage) Logger::log(SEND, logMessage)
+#define LOG_RECV(logMessage) Logger::log(RECV, logMessage)
 
 class Logger
 {

@@ -155,6 +155,10 @@ const std::string& Logger::getLogLevelString(const LogLevel logLevel)
         return Logger::mLogLevelString = "ERROR";
     case FATAL:
         return Logger::mLogLevelString = "FATAL";
+    case SEND:
+        return Logger::mLogLevelString = "SEND";
+    case RECV:
+        return Logger::mLogLevelString = "RECV";
     default:
         return Logger::mLogLevelString = "";
     }
@@ -174,6 +178,10 @@ const std::string& Logger::getLogLevelColor(const LogLevel logLevel)
         return Logger::mLogColor = ANSI_RED;
     case FATAL:
         return Logger::mLogColor = ANSI_BRED;
+    case SEND:
+        return Logger::mLogColor = ANSI_BWBBLUE;
+    case RECV:
+        return Logger::mLogColor = ANSI_BWBMAGENTA;
     default:
         return Logger::mLogColor = "";
     }
