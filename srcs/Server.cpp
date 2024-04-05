@@ -163,7 +163,6 @@ void Server::run()
             else if (filteredEvents[i].flags & EV_EOF)
             {
                 Logger::log(DEBUG, "EOF occured in kqueue, closing client socket and deleting clientData object");
-                std::perror("kevent");
 
                 // Find the clientData
                 Logger::log(DEBUG, "Finding clientData object");
@@ -281,9 +280,26 @@ void Server::run()
                     if (SOCKET_ERROR == recvMsgLength)
                     {
                         Logger::log(ERROR, "Failed to receive data from client");
-                        std::perror("recv");
                         close(filteredEvents[i].ident);
                         assert(0);
+                        continue;
+                    }
+ 
+                    Server::logClientData(clientData);
+
+                    // Client disconnected
+                    if (recvMsgLength == 0)
+                    {
+                        Logger::log(INFO, "Client disconnected");
+
+                        Server::logClientData(clientData);
+
+                        // Delete clientData object
+                        delete clientData;
+                        clientData = NULL;
+                        mFdToClientGlobalMap.erase(filteredEvents[i].ident);
+                        close(filteredEvents[i].ident);
+                        Logger::log(DEBUG, "ClientData object deleted");
                         continue;
                     }
 
@@ -304,29 +320,21 @@ void Server::run()
                             Logger::log(RECV, clientData->getClientNickname() + " : " + std::string(recvMsg, recvMsgLength));
                     }
 
-                    Server::logClientData(clientData);
-
-                    // Client disconnected
-                    if (recvMsgLength == 0)
-                    {
-                        Logger::log(INFO, "Client disconnected");
-
-                        Server::logClientData(clientData);
-
-                        // Delete clientData object
-                        delete clientData;
-                        clientData = NULL;
-                        mFdToClientGlobalMap.erase(filteredEvents[i].ident);
-                        close(filteredEvents[i].ident);
-                        Logger::log(DEBUG, "ClientData object deleted");
-                        continue;
-                    }
-
                     // Handle message
                     // Push message to message Queue with it's clientData information
                     Logger::log(DEBUG, "Pushing message to serverDataQueue");
                     Server::mClientRecvProcessQueue.push(filteredEvents[i].ident);
                     std::string recvMsgStr(recvMsg, recvMsgLength);
+
+                    // find non printable character except "\r\n" in message and remove it
+                    for (size_t i = 0; i < recvMsgStr.length(); i++)
+                    {
+                        if ((recvMsgStr[i] < 32 || recvMsgStr[i] > 126) && recvMsgStr[i] != '\r' && recvMsgStr[i] != '\n')
+                        {
+                            recvMsgStr.erase(i, 1);
+                            i--;
+                        }
+                    }
                     clientData->appendReceivedString(recvMsgStr);
 
                 }
@@ -1387,8 +1395,9 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
         return false;
     }
 
-    size_t commandStartPos = 0;
 
+    // TODO : FIX THIS LOGIC, IT MUST HANDLE MULTIPLE "\r\n" IN A STRING
+    size_t commandStartPos = 0;
     // Push back strings to messageToExecute's vector and erase it from the string
     if (endPos != std::string::npos)
     {
@@ -1889,35 +1898,20 @@ void Server::disconnectClientDataWithChannel(ClientData* clientData, Channel* ch
 
 void Server::disconnectClientDataFromServer(ClientData* clientData)
 {
-    // send QUIT message to all channels
-    for (std::map<std::string, Channel*>::iterator channelIter = clientData->getConnectedChannels().begin(); channelIter != clientData->getConnectedChannels().end(); channelIter++)
-    {
-        Channel* channel = (*channelIter).second;
-        Message quitMessageToChannel;
-        quitMessageToChannel.mCommand = QUIT;
-        quitMessageToChannel.mMessageTokens.push_back("QUIT");
-        quitMessageToChannel.mMessageTokens.push_back(clientData->getClientNickname());
-        for (std::map<std::string, ClientData*>::iterator nickIter = channel->getNickToClientDataMap().begin(); nickIter != channel->getNickToClientDataMap().end(); nickIter++)
-        {
-            ClientData* clientInChannel = (*nickIter).second;
-            clientInChannel->getExecuteMessageQueue().push(quitMessageToChannel);
-        }
-    }
-    // send QUIT message to all clients
-    for (std::map<SOCKET_FD, ClientData*>::iterator clientIter = mFdToClientGlobalMap.begin(); clientIter != mFdToClientGlobalMap.end(); clientIter++)
-    {
-        ClientData* client = (*clientIter).second;
-        Message quitMessageToClient;
-        quitMessageToClient.mCommand = QUIT;
-        quitMessageToClient.mMessageTokens.push_back("QUIT");
-        quitMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
-        client->getExecuteMessageQueue().push(quitMessageToClient);
-    }
-
     // delete clientData
     Logger::log(DEBUG, "Deleting clientData");
     Server::logClientData(clientData);
     const SOCKET_FD clientFD = clientData->getClientSocket();
+    std::map <std::string, Channel*> connectedChannels = clientData->getConnectedChannels();
+    for (std::map<std::string, Channel*>::iterator it = connectedChannels.begin(); it != connectedChannels.end(); it++)
+    {
+        it->second->getNickToClientDataMap().erase(clientData->getClientNickname());
+        if (it->second->getNickToClientDataMap().empty())
+        {
+            delete it->second;
+            it->second = NULL;
+        }
+    }
     delete clientData;
     clientData = NULL;
     mFdToClientGlobalMap.erase(clientFD);
