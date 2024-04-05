@@ -170,6 +170,7 @@ void Server::run()
                 // TODO : change to .find() instead of operator[] for preventing creating new ClientData object when not found
                 ClientData* clientData = mFdToClientGlobalMap[filteredEvents[i].ident]; // cuz it's map, it's O(logN)
                 delete clientData;
+                clientData = NULL;
                 Logger::log(DEBUG, "ClientData object deleted");
                 mFdToClientGlobalMap.erase(filteredEvents[i].ident);
                 Logger::log(DEBUG, "Client removed from map");
@@ -286,7 +287,22 @@ void Server::run()
                         continue;
                     }
 
-                    Logger::log(INFO, clientData->getIp() + " sent message : " + std::string(recvMsg, recvMsgLength));
+                    if (clientData->getClientNickname().empty())
+                    {
+                        std::string recvMsgStr(recvMsg, recvMsgLength);
+                        if (recvMsgStr.length() > 2 && recvMsgStr[recvMsgStr.length() - 1] == '\n' && recvMsgStr[recvMsgStr.length() - 2] == '\r')
+                            Logger::log(RECV, std::string(inet_ntoa(clientData->getClientAddress().sin_addr)) + " : " + std::string(recvMsg, recvMsgLength - 2));
+                        else
+                            Logger::log(RECV, std::string(inet_ntoa(clientData->getClientAddress().sin_addr)) + " : " + std::string(recvMsg, recvMsgLength));
+                    }
+                    else
+                    {
+                        std::string recvMsgStr(recvMsg, recvMsgLength);
+                        if (recvMsgStr.length() > 2 && recvMsgStr[recvMsgStr.length() - 1] == '\n' && recvMsgStr[recvMsgStr.length() - 2] == '\r')
+                            Logger::log(RECV, clientData->getClientNickname() + " : " + std::string(recvMsg, recvMsgLength - 2));
+                        else
+                            Logger::log(RECV, clientData->getClientNickname() + " : " + std::string(recvMsg, recvMsgLength));
+                    }
 
                     Server::logClientData(clientData);
 
@@ -299,6 +315,7 @@ void Server::run()
 
                         // Delete clientData object
                         delete clientData;
+                        clientData = NULL;
                         mFdToClientGlobalMap.erase(filteredEvents[i].ident);
                         close(filteredEvents[i].ident);
                         Logger::log(DEBUG, "ClientData object deleted");
@@ -351,6 +368,11 @@ void Server::run()
                     if (tokenIdx != messageTokens.size() - 1)
                         sendMsg += " ";
                 }
+
+                if (clientData->getClientNickname().empty())
+                    Logger::log(SEND, clientData->getIp() + " : " + sendMsg);
+                else
+                    Logger::log(SEND, clientData->getClientNickname() + " : " + sendMsg);
                 sendMsg += "\r\n";
 
                 const int sendMsgLength = send(clientFD, sendMsg.c_str(), sendMsg.length(), 0);
@@ -362,8 +384,6 @@ void Server::run()
                     assert(0);
                     continue;
                 }
-
-                Logger::log(INFO, "Server sent message : " + std::string(sendMsg, sendMsgLength));
 
                 // Pop message from queue
                 clientData->getServerToClientSendQueue().pop();
@@ -428,8 +448,23 @@ void Server::run()
                     // This logic Takes O(log N), probably can optimize it
 
                     Logger::log(DEBUG, "Executing parsed message to clientData object");
-                    executeParsedMessages(clientData);
+                    Logger::log(DEBUG, "Checking if clientData object is still in map");
+
+                    clientData = mFdToClientGlobalMap.find(clientFD)->second;
+                    if (clientData == NULL)
+                    {
+                        // QUIT or disconnected already.
+                        break;
+                    }
+                    else
+                    {
+                        executeParsedMessages(clientData);
+                    }
                 }
+
+                // QUIT or disconnected already.
+                if (mFdToClientGlobalMap.find(clientFD) == mFdToClientGlobalMap.end())
+                    continue;
 
                 // Enable EVFILT_WRITE filter when there is message to send
                 struct kevent newSendEvent;
@@ -441,10 +476,8 @@ void Server::run()
                 newSendEvent.udata = NULL;
                 if (kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL) == -1)
                 {
-                    Logger::log(ERROR, "Failed to enable EVFILT_WRITE event");
-                    std::perror("kevent");
+                    Logger::log(ERROR, "Failed to enable EVFILT_WRITE event, probably client disconnected");
                     close(clientFD);
-                    assert(false);
                     continue;
                 }
 
@@ -458,7 +491,7 @@ void Server::executeParsedMessages(ClientData* clientData)
 {
     // SOCKET_FD clientFD = clientData->getClientSocket();
     std::map<std::string, ClientData*>::const_iterator nickIter;
-    while (!clientData->getExecuteMessageQueue().empty())
+    while (clientData != NULL && !clientData->getExecuteMessageQueue().empty())
     {
         Message messageToExecute = clientData->getExecuteMessageQueue().front();
         size_t commandStartPos = 0;
@@ -499,12 +532,6 @@ void Server::executeParsedMessages(ClientData* clientData)
             // When PASS is done, response back with NOTICE AUTH :*** Looking up your hostname...
             if (mServerPassword == "" || (mServerPassword.length() == messageToExecute.mMessageTokens[commandStartPos + 1].length() && mServerPassword == messageToExecute.mMessageTokens[commandStartPos + 1]))
             {
-                Logger::log(INFO, "Client passed password");
-                Logger::log(DEBUG, "Sending RPL_PASSACCEPTED");
-
-                Message errMessagetoClient;
-                errMessagetoClient.mMessageTokens.push_back(RPL_PASSACCEPTED);
-                errMessagetoClient.mMessageTokens.push_back("Password accepted");
                 Logger::log(INFO, "Client Successfully sent PASS command and authenticated");
 
                 successMessageToClient.mCommand = NOTICE;
@@ -512,6 +539,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 successMessageToClient.mMessageTokens.push_back("NOTICE");
                 successMessageToClient.mMessageTokens.push_back("AUTH");
                 successMessageToClient.mMessageTokens.push_back(":*** Looking up your hostname...");
+
                 clientData->getServerToClientSendQueue().push(successMessageToClient);
                 clientData->setIsRegistered(true);
                 clientData->setLastPingTime(time(NULL));
@@ -529,6 +557,7 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 const SOCKET_FD clientFD = clientData->getClientSocket();
                 delete clientData;
+                clientData = NULL;
                 mFdToClientGlobalMap.erase(clientFD);
                 close(clientFD);
                 Logger::log(DEBUG, "Client disconnected");
@@ -543,11 +572,11 @@ void Server::executeParsedMessages(ClientData* clientData)
             //  client, drop the NICK command, and not generate any kills.
             Logger::log(DEBUG, "executing NICK command from " + getIpFromClientData(clientData) + " with nickname " + messageToExecute.mMessageTokens[0]);
 
-            successMessageToClient.mCommand = NONE;
+            successMessageToClient.mCommand = NOTICE;
             successMessageToClient.mMessageTokens.clear();
-
-            successMessageToClient.mMessageTokens.push_back(RPL_NICKACCEPTED);
-            successMessageToClient.mMessageTokens.push_back("Nickname accepted");
+            successMessageToClient.mMessageTokens.push_back("NOTICE");
+            successMessageToClient.mMessageTokens.push_back("AUTH");
+            successMessageToClient.mMessageTokens.push_back("*** Nickname accepted");
             clientData->getServerToClientSendQueue().push(successMessageToClient);
 
             clientData->setClientNickname(messageToExecute.mMessageTokens[paramStartPos]);
@@ -581,10 +610,23 @@ void Server::executeParsedMessages(ClientData* clientData)
             Logger::log(DEBUG, "executing USER command from");
             Server::logClientData(clientData);
 
-            successMessageToClient.mCommand = NONE;
+            successMessageToClient.mCommand = NOTICE;
+            successMessageToClient.mMessageTokens.push_back("NOTICE");
+            successMessageToClient.mMessageTokens.push_back("AUTH");
+            successMessageToClient.mMessageTokens.push_back(":*** Checking Ident");
+
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
             successMessageToClient.mMessageTokens.clear();
-            // TODO : send correct RPL
-            // clientData->getServerToClientSendQueue().push(successMessageToClient);
+            successMessageToClient.mMessageTokens.push_back("NOTICE");
+            successMessageToClient.mMessageTokens.push_back("AUTH");
+            successMessageToClient.mMessageTokens.push_back(":*** Actually we don't check ident");
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
+
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back("NOTICE");
+            successMessageToClient.mMessageTokens.push_back("AUTH");
+            successMessageToClient.mMessageTokens.push_back(":*** cuz we don't communicate with other servers lol");
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
 
             clientData->setUsername(messageToExecute.mMessageTokens[paramStartPos]);
             clientData->setHostname(messageToExecute.mMessageTokens[paramStartPos + 1]);
@@ -595,6 +637,71 @@ void Server::executeParsedMessages(ClientData* clientData)
             Logger::log(INFO, "Client " + clientData->getClientNickname() + " set hostname to " + messageToExecute.mMessageTokens[paramStartPos + 1]);
             Logger::log(INFO, "Client " + clientData->getClientNickname() + " set servername to " + messageToExecute.mMessageTokens[paramStartPos + 2]);
             Logger::log(INFO, "Client " + clientData->getClientNickname() + " set realname to " + messageToExecute.mMessageTokens[paramStartPos + 3]);
+
+            successMessageToClient.mCommand = NONE;
+            successMessageToClient.mMessageTokens.clear();
+            // RPL_WELCOME
+            // :server 001 <nick> :Welcome to the Internet Relay Network <nick>!<user>@<host>
+            successMessageToClient.mMessageTokens.push_back(RPL_WELCOME);
+            successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+            successMessageToClient.mMessageTokens.push_back("Welcome to the Internet Relay Network " + clientData->getClientNickname() + "! " + clientData->getIp());
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
+
+            // RPL_YOURHOST
+            // :server 002 <nick> <servername> <version>
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back(RPL_YOURHOST);
+            successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+            successMessageToClient.mMessageTokens.push_back("Your host is " + std::string(inet_ntoa(mServerAddress.sin_addr)) + ", running version 0.0.1");
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
+
+            // RPL_CREATED
+            // :server 003 <nick> :This server was created <date>
+            {
+                successMessageToClient.mMessageTokens.clear();
+                successMessageToClient.mMessageTokens.push_back(RPL_CREATED);
+                successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                std::string timeNow = std::ctime(&mServerStartTime);
+                timeNow.pop_back();
+                successMessageToClient.mMessageTokens.push_back("This server was created " + timeNow);
+                clientData->getServerToClientSendQueue().push(successMessageToClient);
+            }
+
+            // RPL_MYINFO
+            // :server 004 <nick> <servername> <version> <available umodes> <available cmodes> [<cmodes with param>]
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back(RPL_MYINFO);
+            successMessageToClient.mMessageTokens.push_back(SERVER_NAME);
+            successMessageToClient.mMessageTokens.push_back(SERVER_VERSION);
+            successMessageToClient.mMessageTokens.push_back("o");
+            successMessageToClient.mMessageTokens.push_back("itkol");
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
+
+            // skip 251 - 255
+
+            // 375 RPL_MOTDSTART
+            // :server 375 <nick> :- <server> Message of the day -
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back(RPL_MOTDSTART);
+            successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+            successMessageToClient.mMessageTokens.push_back(":- " + std::string(inet_ntoa(mServerAddress.sin_addr)) + " Message of the day -");
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
+
+            // 372 RPL_MOTD
+            // :server 372 <nick> :- <text>
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back(RPL_MOTD);
+            successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+            successMessageToClient.mMessageTokens.push_back(":알아 노십쇼");
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
+
+            // 376 RPL_ENDOFMOTD
+            // :server 376 <nick> :End of /MOTD command.
+            successMessageToClient.mMessageTokens.clear();
+            successMessageToClient.mMessageTokens.push_back(RPL_ENDOFMOTD);
+            successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+            successMessageToClient.mMessageTokens.push_back(":End of /MOTD command.");
+            clientData->getServerToClientSendQueue().push(successMessageToClient);
 
             Server::logClientData(clientData);
             break;
@@ -994,36 +1101,32 @@ void Server::executeParsedMessages(ClientData* clientData)
 
         case QUIT:
             // disconnect client
+        {
             Logger::log(DEBUG, "executing QUIT command from");
             Server::logClientData(clientData);
 
-            // send QUIT message to all channels
-            for (std::map<std::string, Channel*>::iterator channelIter = clientData->getConnectedChannels().begin(); channelIter != clientData->getConnectedChannels().end(); channelIter++)
+            // TODO: delete things and close socket
+            const SOCKET_FD clientFD = clientData->getClientSocket();
+            std::map <std::string, Channel*> connectedChannels = clientData->getConnectedChannels();
+            for (std::map<std::string, Channel*>::iterator it = connectedChannels.begin(); it != connectedChannels.end(); it++)
             {
-                Channel* channel = (*channelIter).second;
-                Message quitMessageToChannel;
-                quitMessageToChannel.mCommand = QUIT;
-                quitMessageToChannel.mMessageTokens.push_back("QUIT");
-                quitMessageToChannel.mMessageTokens.push_back(clientData->getClientNickname() + " has quit");
-                for (std::map<std::string, ClientData*>::iterator nickIter = channel->getNickToClientDataMap().begin(); nickIter != channel->getNickToClientDataMap().end(); nickIter++)
+                it->second->getNickToClientDataMap().erase(clientData->getClientNickname());
+                if (it->second->getNickToClientDataMap().empty())
                 {
-                    ClientData* clientInChannel = (*nickIter).second;
-                    clientInChannel->getExecuteMessageQueue().push(quitMessageToChannel);
+                    delete it->second;
+                    it->second = NULL;
                 }
             }
-            // send QUIT message to all clients
-            for (std::map<SOCKET_FD, ClientData*>::iterator clientIter = mFdToClientGlobalMap.begin(); clientIter != mFdToClientGlobalMap.end(); clientIter++)
-            {
-                ClientData* client = (*clientIter).second;
-                Message quitMessageToClient;
-                quitMessageToClient.mCommand = QUIT;
-                quitMessageToClient.mMessageTokens.push_back("QUIT");
-                quitMessageToClient.mMessageTokens.push_back(clientData->getClientNickname() + " has quit");
-                client->getExecuteMessageQueue().push(quitMessageToClient);
-            }
-            // TODO: delete things and close socket
+            delete clientData;
+            clientData = NULL;
+            mFdToClientGlobalMap.erase(clientFD);
+            close(clientFD);
+            Logger::log(DEBUG, "Client disconnected");
+        }
 
-            break;
+
+
+        break;
         case KICK:
 
             //             Command: KICK
@@ -1205,7 +1308,8 @@ void Server::executeParsedMessages(ClientData* clientData)
             break;
 
         }
-        clientData->getExecuteMessageQueue().pop();
+        if (clientData != NULL)
+            clientData->getExecuteMessageQueue().pop();
     }
 }
 
@@ -1376,6 +1480,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
 
             const SOCKET_FD clientFD = clientData->getClientSocket();
             delete clientData;
+            clientData = NULL;
             mFdToClientGlobalMap.erase(clientFD);
             close(clientFD);
             Logger::log(DEBUG, "Client disconnected");
@@ -1404,6 +1509,7 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
 
             const SOCKET_FD clientFD = clientData->getClientSocket();
             delete clientData;
+            clientData = NULL;
             mFdToClientGlobalMap.erase(clientFD);
             close(clientFD);
             Logger::log(DEBUG, "Client disconnected");
@@ -1556,6 +1662,43 @@ bool Server::parseReceivedRequestFromClientData(SOCKET_FD client)
     else if (messageToExecute.mMessageTokens[commandStartPos] == "QUIT")
     {
         messageToExecute.mCommand = QUIT;
+        messageToExecute.mMessageTokens.push_back("QUIT");
+
+        if (messageToExecute.mMessageTokens.size() > commandStartPos + 1 && messageToExecute.mMessageTokens[commandStartPos + 1].length() > 0)
+        {
+            std::string reason;
+            // should handle multi-word message, 
+            size_t len = 5;
+            if (messageToExecute.mMessageTokens[commandStartPos + 1][0] == ':')
+            {
+                for (size_t i = commandStartPos + 1; i < messageToExecute.mMessageTokens.size(); i++)
+                {
+                    // check if the message is too long
+                    if (len + messageToExecute.mMessageTokens[i].length() > MAX_MESSAGE_LENGTH)
+                    {
+                        Logger::log(WARNING, "Message is too long, sending nickname instead");
+                        messageToExecute.mMessageTokens.push_back(clientData->getClientNickname());
+                        break;
+                    }
+                    reason += messageToExecute.mMessageTokens[i];
+                }
+                clientData->getExecuteMessageQueue().push(messageToExecute);
+                return true;
+            }
+            else if (messageToExecute.mMessageTokens[commandStartPos + 1][0] != ':')
+            {
+                // should ignore other parameters
+                while (messageToExecute.mMessageTokens.size() != commandStartPos + 1)
+                {
+                    messageToExecute.mMessageTokens.pop_back();
+                }
+                clientData->getExecuteMessageQueue().push(messageToExecute);
+                return true;
+            }
+        }
+
+
+
         clientData->getExecuteMessageQueue().push(messageToExecute);
         return true;
     }
@@ -1734,4 +1877,50 @@ void Server::logMessage(const Message& message) const
         Logger::log(DEBUG, message.mMessageTokens[i]);
     }
     Logger::log(DEBUG, "================== End of Message ==================");
+}
+
+void Server::disconnectClientDataWithChannel(ClientData* clientData, Channel* channel)
+{
+    // remove clientData from channel
+    channel->getNickToClientDataMap().erase(clientData->getClientNickname());
+    // remove channel from clientData
+    clientData->getConnectedChannels().erase(channel->getName());
+}
+
+void Server::disconnectClientDataFromServer(ClientData* clientData)
+{
+    // send QUIT message to all channels
+    for (std::map<std::string, Channel*>::iterator channelIter = clientData->getConnectedChannels().begin(); channelIter != clientData->getConnectedChannels().end(); channelIter++)
+    {
+        Channel* channel = (*channelIter).second;
+        Message quitMessageToChannel;
+        quitMessageToChannel.mCommand = QUIT;
+        quitMessageToChannel.mMessageTokens.push_back("QUIT");
+        quitMessageToChannel.mMessageTokens.push_back(clientData->getClientNickname());
+        for (std::map<std::string, ClientData*>::iterator nickIter = channel->getNickToClientDataMap().begin(); nickIter != channel->getNickToClientDataMap().end(); nickIter++)
+        {
+            ClientData* clientInChannel = (*nickIter).second;
+            clientInChannel->getExecuteMessageQueue().push(quitMessageToChannel);
+        }
+    }
+    // send QUIT message to all clients
+    for (std::map<SOCKET_FD, ClientData*>::iterator clientIter = mFdToClientGlobalMap.begin(); clientIter != mFdToClientGlobalMap.end(); clientIter++)
+    {
+        ClientData* client = (*clientIter).second;
+        Message quitMessageToClient;
+        quitMessageToClient.mCommand = QUIT;
+        quitMessageToClient.mMessageTokens.push_back("QUIT");
+        quitMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+        client->getExecuteMessageQueue().push(quitMessageToClient);
+    }
+
+    // delete clientData
+    Logger::log(DEBUG, "Deleting clientData");
+    Server::logClientData(clientData);
+    const SOCKET_FD clientFD = clientData->getClientSocket();
+    delete clientData;
+    clientData = NULL;
+    mFdToClientGlobalMap.erase(clientFD);
+    close(clientFD);
+    Logger::log(DEBUG, "Client disconnected");
 }

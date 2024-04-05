@@ -64,6 +64,9 @@ private:
     void connectClientDataWithChannel(ClientData *clientData, Channel *channel);
     void connectClientDataWithChannel(ClientData *clientData, Channel *channel, const std::string &password);
 
+    void disconnectClientDataWithChannel(ClientData *clientData, Channel *channel);
+    void disconnectClientDataFromServer(ClientData *clientData);
+
     void logMessage(const Message &message) const;
 
 private:  // server network data
