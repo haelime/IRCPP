@@ -34,3 +34,23 @@
 #define ANSI_BGMAGENTA  "\033[45m"
 #define ANSI_BGCYAN     "\033[46m"
 #define ANSI_BGWHITE    "\033[47m"
+
+// Regular text with white background
+#define ANSI_BWBLACK    "\033[30;47m"
+#define ANSI_BWRED      "\033[31;47m"
+#define ANSI_BWGREEN    "\033[32;47m"
+#define ANSI_BWYELLOW   "\033[33;47m"
+#define ANSI_BWBLUE     "\033[34;47m"
+#define ANSI_BWMAGENTA  "\033[35;47m"
+#define ANSI_BWCYAN     "\033[36;47m"
+#define ANSI_BWWHITE    "\033[37;47m"
+
+// Regular bold text with white background
+#define ANSI_BWBBLACK   "\033[1;30;47m"
+#define ANSI_BWBRED     "\033[1;31;47m"
+#define ANSI_BWBGREEN   "\033[1;32;47m"
+#define ANSI_BWBYELLOW  "\033[1;33;47m"
+#define ANSI_BWBBLUE    "\033[1;34;47m"
+#define ANSI_BWBMAGENTA "\033[1;35;47m"
+#define ANSI_BWBCYAN    "\033[1;36;47m"
+#define ANSI_BWBWHITE   "\033[1;37;47m"
