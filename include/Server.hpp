@@ -49,7 +49,7 @@ private:
 
     // Try parse RecvMsg
     // ClientData Does NOTHING about this recvMsg, only server will handle it.
-    bool parseReceivedRequestFromClientData(SOCKET_FD client);
+    bool parseReceivedRequestFromClientData(ClientData *client);
 
     void executeParsedMessages(ClientData* clientData);
     bool isValidMessage(const Message& message) const;
@@ -69,6 +69,9 @@ private:
 
     void logMessage(const Message &message) const;
 
+    void sendChannelJoinSucessMessageToClientData(ClientData *clientData, Channel *channel);
+    void sendMessagetoChannel(Channel* channel, const Message& message);
+
 private:  // server network data
     SOCKET_FD mServerListenSocket;
     sockaddr_in mServerAddress;
@@ -87,7 +90,7 @@ private: // server data
     std::map<std::string, ClientData*>  mNickToClientGlobalMap;
     std::map<std::string, Channel*>     mNameToChannelGlobalMap;
 
-    std::queue<SOCKET_FD> mClientRecvProcessQueue;
+    std::queue<SOCKET_FD> mRecvedStrPerClientDataProcessQueue;
 
     time_t mServerStartTime;
     time_t mServerLastPingTime; //< to kick if not received in 2 seconds

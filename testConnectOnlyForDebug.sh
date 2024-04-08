@@ -13,7 +13,8 @@ TEST[3]='JOIN #haeChannel channelPassword'
 TEST[4]='MODE #haeChannel +sn'
 TEST[5]='TOPIC #haeChannel :For test!'
 TEST[6]='PRIVMSG #haeChannel :Hello, server!'
-TEST[7]='PART #haeChannel :Bye, channel!'
+TEST[7]='KICK #haeChannel hae :Boom, you are out!'
+# TEST[7]='PART #haeChannel :Bye, channel!'
 TEST[8]='QUIT awsd :Bye,server!'
 TEST[9]='PRIVATE hae :AM I STILL HERE?'
 
@@ -37,7 +38,7 @@ SERVER_PORT="6667"
         printf "%s\r\n" "${TEST[$i]}"
         sleep 1                                                                                                                                                                                                                                                        
     done
-    ) | nc $SERVER_IP $SERVER_PORT | cat > IrcClient.log
+    ) | nc $SERVER_IP $SERVER_PORT | cat >> IrcClient.log
 
 printf "\n"
 printf "Test Client Log\n"
@@ -46,12 +47,12 @@ cat IrcClient.log
 printf "======================================\n"
 
 # 서버 종료 확인
-if pgrep -x "ircserv" > /dev/null
-then
-    echo "IRC Tested Successfully"
-    pkill -x ircserv
-    exit 0
-else
-    echo "IRC Server Failed to Run"
-    exit 1
-fi
+# if pgrep -x "ircserv" > /dev/null
+# then
+#     echo "IRC Tested Successfully"
+#     pkill -x ircserv
+#     exit 0
+# else
+#     echo "IRC Server Failed to Run"
+#     exit 1
+# fi

@@ -17,7 +17,7 @@ enum Command
     INVITE,
     TOPIC,
     MODE,
-    NOTICE, // <- it's similar with PRIVMSG. no need to implement but, just in case
+    NOTICE, // <- it's similar with PRIVMSG. but only for server to client.
 };
 
 struct Message

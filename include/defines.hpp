@@ -84,3 +84,4 @@ typedef std::string ERROR_NUM_STRING;
 #define RPL_MOTDSTART "375"
 #define RPL_ENDOFMOTD "376"
 
+#define ERR_USERONCHANNEL "443"
