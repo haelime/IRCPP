@@ -35,6 +35,7 @@ public: // constructor, destructor
 
 public: // getter, setters
 
+    void clearPassword() { mPassword.clear(); };
     void setTopic(std::string &topic) { mTopic = topic; };
     void setMode(std::string &mode) { mMode = mode; };
     void setPassword(std::string &password) { mPassword = password; };
@@ -53,7 +54,7 @@ public: // getter, setters
     const int& getUserLimit() const { return mUserLimit; };
 
     std::map<std::string, ClientData *> &getNickToClientDataMap() { return mNickToClientDataMap; };
-
+    std::map<std::string, ClientData *> &getNickToOperatorClientsMap() { return mNickToOperatorClientsMap; };
 
 private:
     // prevent copy

@@ -85,3 +85,7 @@ typedef std::string ERROR_NUM_STRING;
 #define RPL_ENDOFMOTD "376"
 
 #define ERR_USERONCHANNEL "443"
+
+#define ERR_UNKNOWNMODE "472"
+#define RPL_CHANNELMODEIS "324"
+#define ERR_KEYSET "467"
