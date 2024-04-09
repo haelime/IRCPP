@@ -366,13 +366,13 @@ void Server::run()
                 // Make message to send from message tokens
                 // :<Server Name> <Message> \r\n
                 std::string sendMsg;
-                if (clientData->getServerToClientSendQueue().front().mHasPrefix == false)
-                    sendMsg = ":" + std::string(inet_ntoa(mServerAddress.sin_addr)) + " ";
                 if (clientData->getServerToClientSendQueue().empty())
                 {
                     // Logger::log(ERROR, "ServerToClientSendQueue is empty, ignore sending message");
                     continue;
                 }
+                if (clientData->getServerToClientSendQueue().front().mHasPrefix == false)
+                    sendMsg = ":" + std::string(inet_ntoa(mServerAddress.sin_addr)) + " ";
                 std::vector<std::string> messageTokens = clientData->getServerToClientSendQueue().front().mMessageTokens;
                 for (size_t tokenIdx = 0; tokenIdx < messageTokens.size(); tokenIdx++)
                 {
@@ -460,19 +460,21 @@ void Server::run()
                         Logger::log(DEBUG, "Added to executeMessageQueue");
                         // This logic Takes O(log N), probably can optimize it
 
-                        clientData = mFdToClientGlobalMap.find(clientFD)->second;
-                        if (clientData == NULL)
+                        clientDataIter = mFdToClientGlobalMap.find(clientFD);
+                        // clientData = mFdToClientGlobalMap.find(clientFD)->second;
+                        if (clientDataIter == mFdToClientGlobalMap.end())
                         {
                             // QUIT or disconnected already.
                             Logger::log(WARNING, "Got Parsed Message from Client, but ClientData not found");
                             Logger::log(WARNING, "Probably client disconnected");
-                            break;
+                            continue;
                         }
+                        Logger::log(DEBUG, "There is " + ValToString(clientData->getExecuteMessageQueue().size()) + " messages in executeMessageQueue");
                         executeParsedMessages(clientData);
                     }
-                    Logger::log(DEBUG, "There is " + ValToString(clientData->getExecuteMessageQueue().size()) + " messages in executeMessageQueue");
 
-                    executeParsedMessages(clientData);
+
+                    // executeParsedMessages(clientData);
                 }
 
                 // QUIT or disconnected already.
@@ -1218,29 +1220,21 @@ void Server::executeParsedMessages(ClientData* clientData)
             Server::logClientData(clientData);
 
             // TODO: delete things and close socket
-            const SOCKET_FD clientFD = clientData->getClientSocket();
+            Logger::log(DEBUG, "getting connected channels");
             std::map <std::string, Channel*> connectedChannels = clientData->getConnectedChannels();
+            Logger::log(DEBUG, "iterating through connected channels");
             for (std::map<std::string, Channel*>::iterator it = connectedChannels.begin(); it != connectedChannels.end(); it++)
             {
-                if (it->second == NULL)
-                    continue;
-                it->second->getNickToClientDataMap().erase(clientData->getClientNickname());
-                if (it->second->getNickToClientDataMap().empty())
-                {
-                    delete it->second;
-                    it->second = NULL;
-                }
+                Server::disconnectClientDataWithChannel(clientData, it->second);
             }
-            Logger::log(INFO, clientData->getClientNickname() + " Disconnected from Server!");
-            delete clientData;
-            clientData = NULL;
-            mFdToClientGlobalMap.erase(clientFD);
-            close(clientFD);
+
+            Server::disconnectClientDataFromServer(clientData);
         }
 
+        // THIS IS THE LAST MESSAGE OF CLIENT!
+        // WE MUST RETURN NOW!
+        return;
 
-
-        break;
         case KICK:
 
             //             Command: KICK
@@ -2463,6 +2457,16 @@ void Server::disconnectClientDataFromServer(ClientData* clientData)
         }
     }
     Logger::log(DEBUG, clientData->getClientNickname() + " disconnected from Server!");
+
+    // remove kevent from kqueue
+    struct kevent evSet;
+    EV_SET(&evSet, clientFD, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+    if (kevent(mhKqueue, &evSet, 1, NULL, 0, NULL) == -1)
+    {
+        Logger::log(ERROR, "kevent() failed");
+        assert(false);
+    }
+
     delete clientData;
     clientData = NULL;
     mFdToClientGlobalMap.erase(clientFD);

@@ -1,9 +1,9 @@
-make re
+# make re
 
 # IRC 서버 실행 함수
-run_irc_server() {
-    ./ircserv 6667 1234 &
-}
+# run_irc_server() {
+#     ./ircserv 6667 1234 &
+# }
 
 # 테스트 메시지
 TEST[0]='PASS 1234'
