@@ -33,13 +33,19 @@ bool Server::initServer(int argc, char** argv)
     mServerAddress.sin_len = sizeof(mServerAddress);
     mServerAddressLength = mServerAddress.sin_len;
 
+    int yes = 1;
+    if (setsockopt(mServerListenSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
+    {
+        Logger::log(FATAL, "Failed to mod socket option");
+        assert(0);
+        return false;
+    }
+
     // Bind listen socket
     Logger::log(DEBUG, "Server is binding socket...");
-    if (SOCKET_ERROR == bind(mServerListenSocket, (const sockaddr*)&mServerAddress,
-        mServerAddressLength))
+    if (SOCKET_ERROR == bind(mServerListenSocket, (const sockaddr*)&mServerAddress, mServerAddressLength))
     {
         Logger::log(FATAL, "Failed to bind socket");
-        std::perror("bind");
         close(mServerListenSocket);
         assert(0);
         return false;
@@ -1199,16 +1205,52 @@ void Server::executeParsedMessages(ClientData* clientData)
             break;
         case PRIVMSG:
 
-            // ERR_NORECIPIENT                ERR_NOTEXTTOSEND
-            // ERR_CANNOTSENDTOCHAN           ERR_NOTOPLEVEL
-            // ERR_WILDTOPLEVEL               ERR_TOOMANYTARGETS
-            // ERR_NOSUCHNICK                 ERR_NOSUCHSERVER
-            // ERR_AWAY
+            // Command: PRIVMSG
+            // Parameters: <receiver>{,<receiver>} <text to be sent>
+
+            // PRIVMSG is used to send private messages between users.  <receiver>
+            // is the nickname of the receiver of the message.  <receiver> can also
+            // be a list of names or channels separated with commas.
+
+            // The <receiver> parameter may also me a host mask  (#mask or $mask).   
+            // In  both cases the server will only send the PRIVMSG
+            // to those who have a server or host matching the mask.  The mask  must
+            // have at  least  1  (one)  "."  in it and no wildcards following the
+            // last ".".  This requirement exists to prevent people sending messages
+            // to  "#*"  or "$*",  which  would  broadcast  to  all  users; from
+            // experience, this is abused more than used responsibly and properly.
+            // Wildcards are  the  '*' and  '?'   characters.   This  extension  to
+            // the PRIVMSG command is only available to Operators.
+
+            // Numeric Replies:
+
+            //         ERR_NORECIPIENT                 ERR_NOTEXTTOSEND
+            //         ERR_CANNOTSENDTOCHAN            ERR_NOTOPLEVEL
+            //         ERR_WILDTOPLEVEL                ERR_TOOMANYTARGETS
+            //         ERR_NOSUCHNICK
+            //         RPL_AWAY
 
             // Examples:
 
             // :Angel PRIVMSG Wiz :Hello are you receiving this message ?
             //                                 ; Message from Angel to Wiz.
+
+            // PRIVMSG Angel :yes I'm receiving it !receiving it !'u>(768u+1n) .br ;
+            //                                 Message to Angel.
+
+            Logger::log(DEBUG, "executing PRIVMSG command from");
+            Server::logClientData(clientData);
+            Server::logMessage(messageToExecute);
+
+            /** [ ]
+             * <receiver> {, <receiver>} <text to be sent>
+             *  <수신자닉네임>
+             * 1) 이름 | 해널 목록 | 
+             *    호스트 마스크(#) | 서버 마스크($) -> 마스크가 일치한 유저에게만 보낼 수 있음
+             *      => MASK: 적어도 하나의 Dot'.'
+             *               
+             * */
+            
 
 
             break;
@@ -1708,6 +1750,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 }
             }
 
+/*maxlenght */
             // SET MODES
             for (size_t i = 0; i < modes.length(); i++)
             {
@@ -2559,7 +2602,6 @@ void Server::sendChannelJoinSucessMessageToClientData(ClientData* clientData, Ch
     successMessageToClient.mMessageTokens.push_back("End of /NAMES list");
 
 }
-
 void Server::sendMessagetoChannel(Channel* channel, const Message& message)
 {
     for (std::map<std::string, ClientData*>::iterator it = channel->getNickToClientDataMap().begin(); it != channel->getNickToClientDataMap().end(); it++)
@@ -2567,3 +2609,5 @@ void Server::sendMessagetoChannel(Channel* channel, const Message& message)
         it->second->getServerToClientSendQueue().push(message);
     }
 }
+
+/*[ ] sendMessagetoClient : 범용성있게끔 만들기 */
