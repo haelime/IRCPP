@@ -563,11 +563,14 @@ void Server::executeParsedMessages(ClientData* clientData)
             else
             {
                 Logger::log(WARNING, "Invalid password, disconnecting client");
-                Server::logMessage(messageToExecute);
-                Message errMessageToClient;
-                errMessageToClient.mMessageTokens.push_back(ERR_PASSWDMISMATCH);
-                errMessageToClient.mMessageTokens.push_back(":*** Password Missmatched, disconnecting...");
-                clientData->getServerToClientSendQueue().push(errMessageToClient);
+
+                // We Cannot Send The Message To Client.
+
+                // Server::logMessage(messageToExecute);
+                // Message errMessageToClient;
+                // errMessageToClient.mMessageTokens.push_back(ERR_PASSWDMISMATCH);
+                // errMessageToClient.mMessageTokens.push_back(":*** Password Missmatched, disconnecting...");
+                // clientData->getServerToClientSendQueue().push(errMessageToClient);
 
                 const SOCKET_FD clientFD = clientData->getClientSocket();
                 delete clientData;
@@ -595,6 +598,8 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             clientData->setClientNickname(messageToExecute.mMessageTokens[paramStartPos]);
             Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + messageToExecute.mMessageTokens[0]);
+            if (!clientData->getHostname().empty() && !clientData->getUsername().empty() && !clientData->getRealname().empty() && !clientData->getServername().empty())
+                clientData->setIsRegistered(true);
             break;
 
         case USER:
@@ -717,9 +722,16 @@ void Server::executeParsedMessages(ClientData* clientData)
             successMessageToClient.mMessageTokens.push_back(":End of /MOTD command.");
             clientData->getServerToClientSendQueue().push(successMessageToClient);
 
+            if (!clientData->getClientNickname().empty())
+                clientData->setIsRegistered(true);
+
             Server::logClientData(clientData);
             break;
         case JOIN:
+
+            // TODO!!!!!!!!!!!!!!!!!!!!!!!!! CHECK ISREGISTERED EVERY CASES !!!!!!!!!!!!!!!!!!!!!!!!
+
+
             // Parameters: <channel>{,<channel>} [<key>{,<key>}]
 
             // The JOIN command is used by client to start listening a specific
@@ -2099,7 +2111,6 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 errMessageToClient.mMessageTokens.push_back("USER");
                 errMessageToClient.mMessageTokens.push_back("Not enough parameters");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
-                assert(false);
                 continue;
             }
 
