@@ -1118,7 +1118,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 channelNames.push_back(channelName);
                 posStart = posEnd + 1;
                 posEnd = messageToExecute.mMessageTokens[paramStartPos].find(',', posStart);
-            }
+        }
             // add last channel to channelNames vector
             {
                 std::string channelName = messageToExecute.mMessageTokens[paramStartPos].substr(posStart, posEnd);
@@ -1204,7 +1204,6 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             break;
         case PRIVMSG:
-
             // Command: PRIVMSG
             // Parameters: <receiver>{,<receiver>} <text to be sent>
 
@@ -1224,11 +1223,11 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             // Numeric Replies:
 
-            //         ERR_NORECIPIENT                 ERR_NOTEXTTOSEND
-            //         ERR_CANNOTSENDTOCHAN            ERR_NOTOPLEVEL
-            //         ERR_WILDTOPLEVEL                ERR_TOOMANYTARGETS
-            //         ERR_NOSUCHNICK
-            //         RPL_AWAY
+            //         ERR_NORECIPIENT (받는사람 인자없을때)     ERR_NOTEXTTOSEND(보낼 txt없을때)
+            //         ERR_CANNOTSENDTOCHAN(참여하지 않은 채널) ERR_NOTOPLEVEL
+            //         ERR_WILDTOPLEVEL                ERR_TOOMANYTARGETS(중복처리 target..)
+            //         ERR_NOSUCHNICK (없는 유저)
+            //         ERR_NOSUCHCHANNEL (없는 채널)
 
             // Examples:
 
@@ -1243,6 +1242,7 @@ void Server::executeParsedMessages(ClientData* clientData)
             Server::logMessage(messageToExecute);
 
             /** [ ]
+             * [ ]: 512자 넘으면 이후의 문자는 삭제한다. ( \r\n포함)_510 words)
              * <receiver> {, <receiver>} <text to be sent>
              *  <수신자닉네임>
              * 1) 이름 | 해널 목록 | 
@@ -2122,6 +2122,7 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 errMessageToClient.mMessageTokens.push_back(ERR_NICKCOLLISION);
                 errMessageToClient.mMessageTokens.push_back("Nickname collision");
 
+// [ ]: ERR_NICKNAMEINUSE _ "<nick> :Nickname is already in use" //**- > ERR_NICKCOLLISION **
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 assert(false);
                 continue;
