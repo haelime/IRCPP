@@ -7,13 +7,13 @@
 
 # 테스트 메시지
 TEST[0]='PASS 1234'
-TEST[1]='NICK hae'
+TEST[1]='NICK h'
 TEST[2]='USER haeLoginName 0 * :haeRealname'
-TEST[3]='JOIN #haeChannel channelPassword'
-TEST[4]='MODE #haeChannel +sn'
-TEST[5]='TOPIC #haeChannel :For test!'
-TEST[6]='PRIVMSG #haeChannel :Hello, server!'
-TEST[7]='KICK #haeChannel hae :Boom, you are out!'
+TEST[3]='JOIN #chan 1234'
+TEST[4]='MODE #chan +sn'
+TEST[5]='TOPIC #chan :For test!'
+TEST[6]='PRIVMSG #chan :Hello, server!'
+TEST[7]='KICK #chan ha :Boom, you are out!'
 # TEST[7]='PART #haeChannel :Bye, channel!'
 TEST[8]='QUIT awsd :Bye,server!'
 TEST[9]='PRIVATE hae :AM I STILL HERE?'
@@ -22,7 +22,7 @@ TEST[9]='PRIVATE hae :AM I STILL HERE?'
 # run_irc_server
 
 # 잠시 대기하여 서버가 준비될 때까지 기다립니다.
-sleep 3
+# sleep 3
 
 # 서버 IP와 포트 설정
 SERVER_IP="127.0.0.1"
@@ -38,7 +38,7 @@ SERVER_PORT="6667"
         printf "%s\r\n" "${TEST[$i]}"
         sleep 1                                                                                                                                                                                                                                                        
     done
-    ) | nc $SERVER_IP $SERVER_PORT | cat >> IrcClient.log
+    ) | nc $SERVER_IP $SERVER_PORT | cat > IrcClient.log
 
 printf "\n"
 printf "Test Client Log\n"

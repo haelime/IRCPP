@@ -90,3 +90,4 @@ typedef std::string ERROR_NUM_STRING;
 #define ERR_CANNOTSENDTOCHAN "404"
 #define RPL_CHANNELMODEIS "324"
 #define ERR_KEYSET "467"
+#define ERR_NICKNAMEINUSE "433"
