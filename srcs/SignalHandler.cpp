@@ -32,6 +32,6 @@ void SignalHandler::handleSigInt(int signal)
         delete it->second;
     }
 
-    Logger::log(INFO, "Server is stopped by user.");
+    Logger::log(INFO, "Server Got SIGINT. Exiting...");
     exit(0);
 }
