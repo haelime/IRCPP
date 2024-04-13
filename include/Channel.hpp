@@ -6,6 +6,7 @@
 #include <map> // to store connected clients
 
 #include "defines.hpp"
+#include "types.hpp"
 #include "Server.hpp"
 #include "ClientData.hpp"
 
@@ -52,6 +53,12 @@ public: // getter, setters
     const bool& getIsTopicRestricted() const { return mIsTopicRestricted; };
     const bool& getIsKeyProtected() const { return mIsKeyProtected; };
     const int& getUserLimit() const { return mUserLimit; };
+
+    // 353 RPL_NAMREPLY
+    const Message getNameReply(const ClientData *requestClient);
+
+    // 366 RPL_ENDOFNAMES
+    const Message getEndOfNames(const ClientData *requestClient);
 
     std::map<std::string, ClientData *> &getNickToClientDataMap() { return mNickToClientDataMap; };
     std::map<std::string, ClientData *> &getNickToOperatorClientsMap() { return mNickToOperatorClientsMap; };

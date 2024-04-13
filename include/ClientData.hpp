@@ -9,6 +9,7 @@
 #include "defines.hpp"
 
 class Channel;
+typedef int SOCKET_FD;
 
 // ClientData Must have it's information, and it's connected channels
 class ClientData
@@ -58,8 +59,8 @@ public: // getter, setters
     const std::string& getRealname() const { return mRealname; };
     void setRealname(std::string& realname) { mRealname = realname; };
 
-    const SOCKET_FD& getClientSocket() const { return mClientSocket; };
-    void setClientSocket(SOCKET_FD& clientSocket) { mClientSocket = clientSocket; };
+    const SOCKET_FD& getClientSocket() const;
+    void setClientSocket(SOCKET_FD& clientSocket);
 
     void    setIp(std::string& ip) { mClientIp = ip; };
     const std::string& getIp() const { return mClientIp; };
