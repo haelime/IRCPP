@@ -39,7 +39,8 @@ bool Server::initServer(int argc, char** argv)
         mServerAddressLength))
     {
         Logger::log(FATAL, "Failed to bind socket");
-        std::perror("bind");
+        Logger::log(FATAL, "Probably port is already in use");
+        // std::perror("bind");
         close(mServerListenSocket);
         assert(0);
         return false;
@@ -454,7 +455,7 @@ void Server::run()
 
                     // add string to right clientData's receivedString
 
-                    if (parseReceivedRequestFromClientData(clientData) == true)
+                    while (parseReceivedRequestFromClientData(clientData) == true)
                     {
                         Logger::log(DEBUG, "Message parsed successfully");
                         Logger::log(DEBUG, "Added to executeMessageQueue");
@@ -1214,21 +1215,12 @@ void Server::executeParsedMessages(ClientData* clientData)
                 clientPartMessage.mCommand = PART;
                 clientPartMessage.mMessageTokens.clear();
                 clientPartMessage.mHasPrefix = true;
-                clientPartMessage.mMessageTokens.push_back(clientData->getClientNickname());
+                clientPartMessage.mMessageTokens.push_back(":" + clientData->getClientNickname());
                 clientPartMessage.mMessageTokens.push_back("PART");
                 clientPartMessage.mMessageTokens.push_back(channelNames[i]);
                 clientPartMessage.mMessageTokens.push_back(clientData->getClientNickname());
                 Server::sendMessagetoChannel(channel, clientPartMessage);
 
-                // send PART message to client
-                successMessageToClient.mCommand = NONE;
-                successMessageToClient.mMessageTokens.clear();
-                successMessageToClient.mHasPrefix = true;
-                successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
-                successMessageToClient.mMessageTokens.push_back("PART");
-                successMessageToClient.mMessageTokens.push_back(channelNames[i]);
-                successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
-                clientData->getServerToClientSendQueue().push(successMessageToClient);
             }
 
             Logger::log(INFO, clientData->getClientNickname() + " left channels");
@@ -1256,7 +1248,102 @@ void Server::executeParsedMessages(ClientData* clientData)
                 break;
             }
 
+            Logger::log(DEBUG, "executing PRIVMSG command from");
+            Server::logClientData(clientData);
+            Server::logMessage(messageToExecute);
 
+            // check if there is a recipient
+            if (messageToExecute.mMessageTokens.size() < paramStartPos + 2)
+            {
+                Logger::log(ERROR, "No recipient, sending ERR_NORECIPIENT");
+                errMessageToClient.mMessageTokens.push_back(ERR_NORECIPIENT);
+                errMessageToClient.mMessageTokens.push_back(":No recipient");
+                clientData->getServerToClientSendQueue().push(errMessageToClient);
+                Server::logClientData(clientData);
+                break;
+            }
+
+            // check if there is a text to send
+            if (messageToExecute.mMessageTokens.size() < paramStartPos + 3)
+            {
+                Logger::log(ERROR, "No text to send, sending ERR_NOTEXTTOSEND");
+                errMessageToClient.mMessageTokens.push_back(ERR_NOTEXTTOSEND);
+                errMessageToClient.mMessageTokens.push_back(":No text to send");
+                clientData->getServerToClientSendQueue().push(errMessageToClient);
+                Server::logClientData(clientData);
+                break;
+            }
+
+            // check if recipient is a channel
+
+            {
+                std::string recipient = messageToExecute.mMessageTokens[paramStartPos];
+                std::string text = messageToExecute.mMessageTokens[paramStartPos + 1];
+
+                if (recipient[0] == '#' || recipient[0] == '&')
+                {
+                    Logger::log(DEBUG, "Recipient is a channel");
+                    std::map<std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(recipient);
+                    if (channelIter == mNameToChannelGlobalMap.end())
+                    {
+                        Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
+                        errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                        errMessageToClient.mMessageTokens.push_back(":Channel not found");
+                        clientData->getServerToClientSendQueue().push(errMessageToClient);
+                        Server::logClientData(clientData);
+                        break;
+                    }
+
+                    Channel* channel = channelIter->second;
+                    if (channel->getNickToClientDataMap().find(clientData->getClientNickname()) == channel->getNickToClientDataMap().end())
+                    {
+                        Logger::log(ERROR, "Client is not in the channel, sending ERR_CANNOTSENDTOCHAN");
+                        errMessageToClient.mMessageTokens.push_back(ERR_CANNOTSENDTOCHAN);
+                        errMessageToClient.mMessageTokens.push_back(":Client is not in the channel");
+                        clientData->getServerToClientSendQueue().push(errMessageToClient);
+                        Server::logClientData(clientData);
+                        break;
+                    }
+
+                    // send message to channel
+                    Message clientMessage;
+                    clientMessage.mCommand = PRIVMSG;
+                    clientMessage.mMessageTokens.clear();
+                    clientMessage.mHasPrefix = true;
+                    clientMessage.mMessageTokens.push_back(clientData->getClientNickname());
+                    clientMessage.mMessageTokens.push_back("PRIVMSG");
+                    clientMessage.mMessageTokens.push_back(channel->getName());
+                    clientMessage.mMessageTokens.push_back(text);
+                    Server::sendMessagetoChannel(channel, clientMessage);
+                }
+                else
+                {
+                    Logger::log(DEBUG, "Recipient is a user");
+                    std::map<std::string, ClientData*>::iterator clientIter = mNickToClientGlobalMap.find(recipient);
+                    if (clientIter == mNickToClientGlobalMap.end())
+                    {
+                        Logger::log(ERROR, "Client not found, sending ERR_NOSUCHNICK");
+                        errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHNICK);
+                        errMessageToClient.mMessageTokens.push_back(":Client not found");
+                        clientData->getServerToClientSendQueue().push(errMessageToClient);
+                        Server::logClientData(clientData);
+                        break;
+                    }
+
+                    ClientData* recipientClientData = clientIter->second;
+
+                    // send message to recipient
+                    Message clientMessage;
+                    clientMessage.mCommand = PRIVMSG;
+                    clientMessage.mMessageTokens.clear();
+                    clientMessage.mHasPrefix = true;
+                    clientMessage.mMessageTokens.push_back(clientData->getClientNickname());
+                    clientMessage.mMessageTokens.push_back("PRIVMSG");
+                    clientMessage.mMessageTokens.push_back(recipient);
+                    clientMessage.mMessageTokens.push_back(text);
+                    recipientClientData->getServerToClientSendQueue().push(clientMessage);
+                }
+            }
             break;
 
         case QUIT:
@@ -1573,6 +1660,10 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 // TOPIC #test                     ; Command to check the topic for
                 //                                 #test.
+
+
+            // SHOULD CHECK IF CHANNEL TOPIC NEEDS OPERATOR PRIVILEGES!!!!!!!!!!!!!!!!!!!
+
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
@@ -1613,19 +1704,31 @@ void Server::executeParsedMessages(ClientData* clientData)
                     successMessageToClient.mCommand = TOPIC;
                     successMessageToClient.mMessageTokens.clear();
                     successMessageToClient.mHasPrefix = true;
-                    successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                    successMessageToClient.mMessageTokens.push_back(":"+clientData->getClientNickname());
                     successMessageToClient.mMessageTokens.push_back(channel->getName());
                     successMessageToClient.mMessageTokens.push_back(channel->getTopic());
                     clientData->getServerToClientSendQueue().push(successMessageToClient);
                 }
                 else
                 {
+                    if (channel->getIsTopicRestricted() == true)
+                    {
+                        if (channel->getNickToOperatorClientsMap().find(clientData->getClientNickname()) == channel->getNickToOperatorClientsMap().end())
+                        {
+                            Logger::log(ERROR, "Client is not operator, sending ERR_CHANOPRIVSNEEDED");
+                            errMessageToClient.mMessageTokens.push_back(ERR_CHANOPRIVSNEEDED);
+                            errMessageToClient.mMessageTokens.push_back(":Client is not operator");
+                            clientData->getServerToClientSendQueue().push(errMessageToClient);
+                            Server::logClientData(clientData);
+                            return;
+                        }
+                    }
                     // set the topic
                     channel->setTopic(messageToExecute.mMessageTokens[paramStartPos + 1]);
                     successMessageToClient.mCommand = TOPIC;
                     successMessageToClient.mMessageTokens.clear();
                     successMessageToClient.mHasPrefix = true;
-                    successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                    successMessageToClient.mMessageTokens.push_back(":"+clientData->getClientNickname());
                     successMessageToClient.mMessageTokens.push_back("TOPIC");
                     successMessageToClient.mMessageTokens.push_back(channel->getName());
                     successMessageToClient.mMessageTokens.push_back(channel->getTopic());
