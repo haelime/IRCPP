@@ -65,10 +65,13 @@ public: // getter, setters
     void    setIp(std::string& ip) { mClientIp = ip; };
     const std::string& getIp() const { return mClientIp; };
 
+    KQUEUE_FD getKqueue() { return mhKqueue; };
+    void setKqueue(KQUEUE_FD kqueue) { mhKqueue = kqueue; };
+
     std::string getSendBuffer() { return mSendBuffer; }
     void  setSendBuffer(std::string str) { mSendBuffer = str; }
 
-    std::queue <Message>& getServerToClientSendQueue() { return mServerToClientSendQueue; };
+    std::queue <Message>& getServerToClientSendQueue();
     std::map <std::string, Channel*>& getConnectedChannels() { return mNameToConnectedChannelMap; };
     std::queue <Message> &getExecuteMessageQueue() { return mParsedMessageQueue; };
 
@@ -81,6 +84,8 @@ public:
     // void removeConnectedChannel(Channel* channel);
 
 private:
+    KQUEUE_FD mhKqueue;
+
     // Client's nickname, empty if not set
     std::string mClientNickname;
 

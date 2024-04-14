@@ -17,12 +17,6 @@
 
 // #include "Channel.hpp"
 
-typedef int SOCKET_FD;
-typedef int KQUEUE_FD;
-
-#define SOCKET_ERROR (-1)
-#define KQUEUE_ERROR (-1)
-
 class ClientData;
 class Channel;
 

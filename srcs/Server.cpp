@@ -241,7 +241,7 @@ void Server::run()
                     std::string ip = inet_ntoa(newClientAddress.sin_addr);
                     newClientData->setIp(ip);
                     Logger::log(DEBUG, "New clientData object address : " + ip);
-
+                    newClientData->setKqueue(mhKqueue);
 
                     // it's same as mFdToClientGlobalMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     Logger::log(DEBUG, "Adding new clientData object to map");
@@ -272,8 +272,8 @@ void Server::run()
                     if (SOCKET_ERROR == recvMsgLength)
                     {
                         Logger::log(ERROR, "Failed to receive data from client");
-                        close(filteredEvents[i].ident);
-                        assert(0);
+                        Server::disconnectClientDataFromServer(clientData);
+                        Logger::log(ERROR, "Client disconnected");
                         continue;
                     }
 
@@ -396,9 +396,8 @@ void Server::run()
                 if (SOCKET_ERROR == sendMsgLength)
                 {
                     Logger::log(ERROR, "Failed to send message to client");
-                    std::perror("send");
-                    close(clientFD);
-                    assert(0);
+                    Server::disconnectClientDataFromServer(clientData);
+                    Logger::log(ERROR, "Client disconnected");
                     continue;
                 }
 
@@ -1647,32 +1646,34 @@ void Server::executeParsedMessages(ClientData* clientData)
                     return;
                 }
 
-                // remove user from channel
                 ClientData* clientToKick = channel->getNickToClientDataMap().find(userToKick)->second;
+                
+                // remove user from channel
+                successMessageToClient.mCommand = NONE;
+                successMessageToClient.mMessageTokens.clear();
+                successMessageToClient.mHasPrefix = true;
+                successMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                successMessageToClient.mMessageTokens.push_back("KICK");
+                successMessageToClient.mMessageTokens.push_back(channelName);
+                successMessageToClient.mMessageTokens.push_back(userToKick);
+                successMessageToClient.mMessageTokens.push_back(":Kicked from channel");
+                Server::sendMessagetoChannel(channel, successMessageToClient);
+
                 channel->getNickToClientDataMap().erase(userToKick);
                 if (channel->getNickToClientDataMap().empty())
                 {
                     mNameToChannelGlobalMap.erase(channelName);
                 }
                 clientToKick->getConnectedChannels().erase(channelName);
-
-                successMessageToClient.mCommand = NONE;
-                successMessageToClient.mMessageTokens.clear();
-                successMessageToClient.mMessageTokens.push_back("KICK");
-                successMessageToClient.mMessageTokens.push_back(channelName);
-                successMessageToClient.mMessageTokens.push_back(userToKick);
-                successMessageToClient.mMessageTokens.push_back(":Kicked from channel");
-                clientData->getServerToClientSendQueue().push(successMessageToClient);
             }
             break;
 
-            // NOT TESTED YET!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         case INVITE:
             // ERR_NEEDMOREPARAMS              ERR_NOSUCHNICK
             // ERR_NOTONCHANNEL               ERR_USERONCHANNEL
             // ERR_CHANOPRIVSNEEDED
 
-            // INVITE <channel> <user>
+            // INVITE nick channel
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
@@ -1693,7 +1694,7 @@ void Server::executeParsedMessages(ClientData* clientData)
             }
 
             {
-                std::string channelName = messageToExecute.mMessageTokens[paramStartPos];
+                std::string channelName = messageToExecute.mMessageTokens[paramStartPos + 1];
 
                 std::map <std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(channelName);
 
@@ -1719,7 +1720,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     return;
                 }
 
-                if (channel->getNickToClientDataMap().find(messageToExecute.mMessageTokens[paramStartPos + 1]) != channel->getNickToClientDataMap().end())
+                if (channel->getNickToClientDataMap().find(messageToExecute.mMessageTokens[paramStartPos]) != channel->getNickToClientDataMap().end())
                 {
                     Logger::log(ERROR, "User is already in the channel, sending ERR_USERONCHANNEL");
                     errMessageToClient.mMessageTokens.push_back(ERR_USERONCHANNEL);
@@ -1739,9 +1740,8 @@ void Server::executeParsedMessages(ClientData* clientData)
                     return;
                 }
 
-                ClientData* invitedClient = mNickToClientGlobalMap.find(messageToExecute.mMessageTokens[paramStartPos + 1])->second;
-
-                if (invitedClient == NULL)
+                std::map <std::string, ClientData*>::iterator invitedClientIter = mNickToClientGlobalMap.find(messageToExecute.mMessageTokens[paramStartPos]);
+                if (invitedClientIter == mNickToClientGlobalMap.end())
                 {
                     Logger::log(ERROR, "User not found, sending ERR_NOSUCHNICK");
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHNICK);
@@ -1751,17 +1751,64 @@ void Server::executeParsedMessages(ClientData* clientData)
                     return;
                 }
 
+                ClientData* invitedClient = invitedClientIter->second;
+
                 invitedClient->getServerToClientSendQueue().push(messageToExecute);
 
-                successMessageToClient.mCommand = NONE;
-                successMessageToClient.mMessageTokens.clear();
-                successMessageToClient.mMessageTokens.push_back("INVITE");
-                successMessageToClient.mMessageTokens.push_back(channelName);
-                successMessageToClient.mMessageTokens.push_back(messageToExecute.mMessageTokens[paramStartPos + 1]);
-                successMessageToClient.mMessageTokens.push_back(":Invited to channel");
-                clientData->getServerToClientSendQueue().push(successMessageToClient);
+    
+                // successMessageToClient.mCommand = NONE;
+                // successMessageToClient.mMessageTokens.clear();
+                // successMessageToClient.mHasPrefix = true;
+                // successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                // successMessageToClient.mMessageTokens.push_back("INVITE");
+                // successMessageToClient.mMessageTokens.push_back(channelName);
+                // successMessageToClient.mMessageTokens.push_back(messageToExecute.mMessageTokens[paramStartPos + 1]);
+                // successMessageToClient.mMessageTokens.push_back(":Invited to channel");
+                // clientData->getServerToClientSendQueue().push(successMessageToClient);
 
-                Server::connectClientDataWithChannel(invitedClient, channel);
+            
+                // Server::connectClientDataWithChannel(invitedClient, channel);
+                // :euroserv.fr.quakenet.org 221 haelime +i
+                // :haelime!~a@121.135.181.41 MODE haelime +i
+
+                // :hae!~haeLoginN@121.135.181.35 INVITE haelime #haeChannel
+
+                Message inviteMessageToInvitedClient;
+                inviteMessageToInvitedClient.mCommand = NONE;
+                inviteMessageToInvitedClient.mHasPrefix = true;
+                inviteMessageToInvitedClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                inviteMessageToInvitedClient.mMessageTokens.push_back("INVITE");
+                inviteMessageToInvitedClient.mMessageTokens.push_back(messageToExecute.mMessageTokens[paramStartPos]);
+                inviteMessageToInvitedClient.mMessageTokens.push_back(channelName);
+                inviteMessageToInvitedClient.mMessageTokens.push_back(":Invited to channel");
+                invitedClient->getServerToClientSendQueue().push(inviteMessageToInvitedClient);
+
+                // 채널 클라 상호 연결
+                channel->getNickToClientDataMap()[invitedClient->getClientNickname()] = invitedClient;
+                invitedClient->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
+
+                // send JOIN message to all clients in the channel
+                Message joinMessageToChannel;
+                joinMessageToChannel.mCommand = JOIN;
+                joinMessageToChannel.mHasPrefix = true;
+                joinMessageToChannel.mMessageTokens.push_back(":" + invitedClient->getClientNickname() + "!" + invitedClient->getUsername() + "@" + invitedClient->getHostname());
+                joinMessageToChannel.mMessageTokens.push_back("JOIN");
+                joinMessageToChannel.mMessageTokens.push_back(channel->getName());
+                Server::sendMessagetoChannel(channel, joinMessageToChannel);
+
+                // Message nameReply = channel->getNameReply();
+                // Message endOfNamesMessage = channel->getEndOfNames();
+                
+                // for (std::map<std::string, ClientData*>::iterator it = channel->getNickToClientDataMap().begin(); it != channel->getNickToClientDataMap().end(); it++)
+                // {
+                //     it->second->getServerToClientSendQueue().push(nameReply);
+                //     invitedClient->getServerToClientSendQueue().push(endOfNamesMessage);
+                // }
+
+                
+
+                // 332 353 366 to client (topic, names, endofnames)
+                Server::sendChannelJoinSucessMessageToClientData(invitedClient, channel);
 
             }
             break;
@@ -1811,6 +1858,11 @@ void Server::executeParsedMessages(ClientData* clientData)
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
                 break;
+            }
+            if (messageToExecute.mHasPrefix)
+            {
+                commandStartPos++;
+                paramStartPos++;
             }
             {
                 std::map <std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(messageToExecute.mMessageTokens[paramStartPos]);
@@ -1871,7 +1923,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     successMessageToClient.mMessageTokens.push_back("TOPIC");
                     successMessageToClient.mMessageTokens.push_back(channel->getName());
                     successMessageToClient.mMessageTokens.push_back(channel->getTopic());
-                    clientData->getServerToClientSendQueue().push(successMessageToClient);
+                    Server::sendMessagetoChannel(channel, successMessageToClient);
                 }
             }
 
@@ -1973,6 +2025,7 @@ void Server::executeParsedMessages(ClientData* clientData)
             // o: Give/take channel operator privilege
             // l: Set/remove the user limit to channel
 
+
                 std::map <std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(messageToExecute.mMessageTokens[paramStartPos]);
 
                 if (channelIter == mNameToChannelGlobalMap.end())
@@ -2009,7 +2062,11 @@ void Server::executeParsedMessages(ClientData* clientData)
                 }
 
                 // parse modes
+                std::string modeParams;
+                if (messageToExecute.mMessageTokens.size() > paramStartPos + 1)
+                     modeParams = messageToExecute.mMessageTokens[paramStartPos + 2];
                 std::string mode = messageToExecute.mMessageTokens[paramStartPos + 1];
+
                 if (mode.length() == 0)
                 {
                     Logger::log(INFO, "No modes on this Channel");
@@ -2042,6 +2099,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     assert(false);
                     return;
                 }
+                // if ()
 
                 // SET MODES
                 for (size_t i = 0; i < mode.length(); i++)
@@ -2135,15 +2193,34 @@ void Server::executeParsedMessages(ClientData* clientData)
                             return;
                         }
                     }
+                    
+                    // MODE 처음부터 다시 짜기!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    // JOIN -> PASSWORD 틀렸는데도 성공 메시지 뜨는 거 수정해야함
+                    // MODE -> t, i 완벽
+                    // MODE -> k, o, l 수정해야함
+                    // TODO : copy MODE's response from other server
 
                     // send RPL_CHANNELMODEIS
-                    successMessageToClient.mCommand = NONE;
+                    successMessageToClient.mCommand = MODE;
                     successMessageToClient.mMessageTokens.clear();
-                    successMessageToClient.mMessageTokens.push_back(RPL_CHANNELMODEIS);
+                    successMessageToClient.mHasPrefix = true;
+                    successMessageToClient.mMessageTokens.push_back(":"+clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                    successMessageToClient.mMessageTokens.push_back("MODE");
                     successMessageToClient.mMessageTokens.push_back(channel->getName());
-                    successMessageToClient.mMessageTokens.push_back(channel->getMode());
-                    clientData->getServerToClientSendQueue().push(successMessageToClient);
+                    successMessageToClient.mMessageTokens.push_back(mode);
+                    // if ()
 
+                    Server::sendMessagetoChannel(channel, successMessageToClient);
+
+                    // when the mode is changed, send the message to all clients in the channel
+                    Message nameReply = channel->getNameReply(&mServerAddress, clientData);
+                    Message endOfNamesMessage = channel->getEndOfNames(&mServerAddress, clientData);
+
+                    for (std::map<std::string, ClientData*>::iterator it = channel->getNickToClientDataMap().begin(); it != channel->getNickToClientDataMap().end(); it++)
+                    {
+                        it->second->getServerToClientSendQueue().push(nameReply);
+                        it->second->getServerToClientSendQueue().push(endOfNamesMessage);
+                    }
                 }
             }
             break;

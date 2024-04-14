@@ -22,6 +22,11 @@
 #define SERVER_PING_INTERVAL (60)
 #define SERVER_PING_TIMEOUT (SERVER_PING_INTERVAL * 2)
 
+typedef int SOCKET_FD;
+typedef int KQUEUE_FD;
+
+#define SOCKET_ERROR (-1)
+#define KQUEUE_ERROR (-1)
 
 typedef std::string ERROR_NUM_STRING;
 
