@@ -9,13 +9,14 @@
 #include "defines.hpp"
 
 class Channel;
+typedef int SOCKET_FD;
 
 // ClientData Must have it's information, and it's connected channels
 class ClientData
 {
 
 public: // constructor, destructor
-    ClientData(sockaddr_in newClientAddress) :mClientAddress(newClientAddress) {};
+    ClientData(sockaddr_in newClientAddress) :mClientAddress(newClientAddress), mIsPassed(false), mIsNickSet(false) ,mIsUserSet(false), mIsReadyToChat(false) {};
     virtual ~ClientData() {};
 
 private:
@@ -26,19 +27,22 @@ private:
 
 
 public: // getter, setters
-    void setIsRegistered(bool isRegistered) { mIsRegistered = isRegistered; };
-    const bool& getIsRegistered() const { return mIsRegistered; };
+    void setIsReadyToChat(bool isReadyToChat) { mIsReadyToChat = isReadyToChat; };
+    const bool& getIsReadyToChat() const { return mIsReadyToChat; };
+
+    void setIsPassed(bool isRegistered) { mIsPassed = isRegistered; };
+    const bool& getIsPassed() const { return mIsPassed; };
+
+    void setIsNickSet(bool isNickSet) { mIsNickSet = isNickSet; };
+    const bool& getIsNickSet() const { return mIsNickSet; };
+
+    void setIsUserSet(bool isUserSet) { mIsUserSet = isUserSet; };
+    const bool& getIsUserSet() const { return mIsUserSet; };
 
     const sockaddr_in& getClientAddress() const { return mClientAddress; };
 
     const std::string& getClientNickname() const { return mClientNickname; };
     void setClientNickname(std::string& nickname) { mClientNickname = nickname; };
-
-    const time_t& getLastMessageTime() const { return lastMessageTime; };
-    void setLastMessageTime(time_t& time) { lastMessageTime = time; };
-
-    const time_t& getLastPingTime() const { return lastPingTime; };
-    void setLastPingTime(time_t time) { lastPingTime = time; };
 
     std::string& getReceivedString(void) { return mReceivedString; };
     void setReceivedString(const std::string& recvStr) { mReceivedString = recvStr; };
@@ -55,11 +59,14 @@ public: // getter, setters
     const std::string& getRealname() const { return mRealname; };
     void setRealname(std::string& realname) { mRealname = realname; };
 
-    const SOCKET_FD& getClientSocket() const { return mClientSocket; };
-    void setClientSocket(SOCKET_FD& clientSocket) { mClientSocket = clientSocket; };
+    const SOCKET_FD& getClientSocket() const;
+    void setClientSocket(SOCKET_FD& clientSocket);
 
     void    setIp(std::string& ip) { mClientIp = ip; };
     const std::string& getIp() const { return mClientIp; };
+
+    std::string getSendBuffer() { return mSendBuffer; }
+    void  setSendBuffer(std::string str) { mSendBuffer = str; }
 
     std::queue <Message>& getServerToClientSendQueue() { return mServerToClientSendQueue; };
     std::map <std::string, Channel*>& getConnectedChannels() { return mNameToConnectedChannelMap; };
@@ -88,19 +95,18 @@ private:
     std::string mServername;
     std::string mRealname;
 
-    // Client's last message time to limit 2 seconds
-    time_t lastMessageTime;
-    // Client's last ping time to kick if not received in 2 seconds
-    time_t lastPingTime;
-
     // get raw recv string, parse, push to queue
     std::map <std::string, Channel*>    mNameToConnectedChannelMap;
     std::queue <Message>                mParsedMessageQueue;
 
     // send queue, first vector is the command, least are the params
     std::queue <Message>  mServerToClientSendQueue;
+    std::string mSendBuffer;
 
-    bool mIsRegistered;
+    bool mIsPassed;
+    bool mIsNickSet;
+    bool mIsUserSet;
+    bool mIsReadyToChat;
 
 private:
     std::string mReceivedString;
