@@ -2004,17 +2004,17 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 assert(false);
                 continue;
             }
-            std::string nick = messageToExecute.mMessageTokens[0].substr(1, messageToExecute.mMessageTokens[0].length() - 1);
-            if (mNickToClientGlobalMap.find(nick) != mNickToClientGlobalMap.end())
-            {
-                Logger::log(WARNING, "Nickname collision, sending ERR_NICKCOLLISION");
-                Message errMessageToClient;
-                errMessageToClient.mMessageTokens.push_back(ERR_NICKCOLLISION);
-                errMessageToClient.mMessageTokens.push_back(":Nickname collision");
-                clientData->getServerToClientSendQueue().push(errMessageToClient);
-                assert(false);
-                continue;
-            }
+            // std::string nick = messageToExecute.mMessageTokens[0].substr(1, messageToExecute.mMessageTokens[0].length() - 1);
+            // if (mNickToClientGlobalMap.find(nick) != mNickToClientGlobalMap.end())
+            // {
+            //     Logger::log(WARNING, "Nickname collision, sending ERR_NICKCOLLISION");
+            //     Message errMessageToClient;
+            //     errMessageToClient.mMessageTokens.push_back(ERR_NICKCOLLISION);
+            //     errMessageToClient.mMessageTokens.push_back(":Nickname collision");
+            //     clientData->getServerToClientSendQueue().push(errMessageToClient);
+            //     assert(false);
+            //     continue;
+            // }
             messageToExecute.mHasPrefix = true;
             commandStartPos = 1;
         }
@@ -2116,11 +2116,11 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
             nickIter = mNickToClientGlobalMap.find(messageToExecute.mMessageTokens[commandStartPos + 1]);
             if (nickIter != mNickToClientGlobalMap.end())
             {
-                Logger::log(WARNING, "Nickname collision, sending ERR_NICKCOLLISION");
+                Logger::log(WARNING, "Nickname collision, sending ERR_NICKNAMEINUSE");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
-                errMessageToClient.mMessageTokens.push_back(ERR_NICKCOLLISION);
-                errMessageToClient.mMessageTokens.push_back("Nickname collision");
+                errMessageToClient.mMessageTokens.push_back(ERR_NICKNAMEINUSE);
+                errMessageToClient.mMessageTokens.push_back(messageToExecute.mMessageTokens[commandStartPos + 1] + ":Nickname is already in use");
 
 // [ ]: ERR_NICKNAMEINUSE _ "<nick> :Nickname is already in use" //**- > ERR_NICKCOLLISION **
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
