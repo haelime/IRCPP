@@ -323,7 +323,10 @@ void Server::run()
                             i--;
                         }
                     }
-                    clientData->appendReceivedString(recvMsgStr);
+                    if (recvMsgStr == "\r\n")
+                        continue;
+
+                        clientData->appendReceivedString(recvMsgStr);
 
                 }
             }
@@ -360,23 +363,7 @@ void Server::run()
                     // No exist messages to send
                     if (clientData->getServerToClientSendQueue().empty())
                     {
-                        // Disable EVFILT_WRITE filter when the message is fully sent
-                        struct kevent newSendEvent;
-                        memset(&newSendEvent, 0, sizeof(newSendEvent));
-                        newSendEvent.ident = clientFD;
-                        newSendEvent.filter = EVFILT_WRITE;
-                        newSendEvent.flags = EV_DELETE;
-                        newSendEvent.data = 0;
-                        newSendEvent.udata = NULL;
-                        if (kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL) == -1)
-                        {
-                            Logger::log(ERROR, "Failed to disable EVFILT_WRITE event");
-                            std::perror("kevent");
-                            close(clientFD);
-                            assert(false);
-                            continue;
-                        }
-                        continue;
+                        continue;  
                     }
 
                     std::string sendMsg;
@@ -417,7 +404,6 @@ void Server::run()
 
                 // Maybe kernel buffer or client receive buffer is full
                 else if (sendMsgLength == 0)
-
                 {
                    continue; 
                 }
@@ -425,6 +411,27 @@ void Server::run()
                 // Remove the part of sent
                 buffToSend.erase(0, sendMsgLength);
                 clientData->setSendBuffer(buffToSend);
+
+                // Disable EVFILT_WRITE filter when the message is fully sent
+                if (buffToSend.empty() && clientData->getServerToClientSendQueue().empty())
+                {
+                    struct kevent newSendEvent;
+                    memset(&newSendEvent, 0, sizeof(newSendEvent));
+                    newSendEvent.ident = clientFD;
+                    newSendEvent.filter = EVFILT_WRITE;
+                    newSendEvent.flags = EV_DELETE;
+                    newSendEvent.data = 0;
+                    newSendEvent.udata = NULL;
+                    if (kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL) == -1)
+                    {
+                        Logger::log(ERROR, "Failed to disable EVFILT_WRITE event");
+                        std::perror("kevent");
+                        close(clientFD);
+                        assert(false);
+                        continue;
+                    }
+                    continue;
+                }
             }
         }
 
@@ -645,6 +652,23 @@ void Server::executeParsedMessages(ClientData* clientData)
             clientData->getServerToClientSendQueue().push(successMessageToClient);
 
             clientData->setClientNickname(messageToExecute.mMessageTokens[paramStartPos]);
+
+            // 닉변
+            if (clientData->getIsNickSet() == true)
+            {
+                Message nickMessageToChannels;
+                nickMessageToChannels.mCommand = NICK;
+                nickMessageToChannels.mHasPrefix = true;
+                nickMessageToChannels.mMessageTokens.push_back(":" + clientData->getClientNickname());
+                nickMessageToChannels.mMessageTokens.push_back("NICK");
+                nickMessageToChannels.mMessageTokens.push_back(messageToExecute.mMessageTokens[paramStartPos]);
+                std::map<std::string, Channel*> connectedChannels = clientData->getConnectedChannels();
+                for (std::map<std::string, Channel*>::iterator channelIter = connectedChannels.begin(); channelIter != connectedChannels.end(); channelIter++)
+                {
+                    Server::sendMessagetoChannel(channelIter->second, nickMessageToChannels);
+                }
+            }
+
             mNickToClientGlobalMap[messageToExecute.mMessageTokens[paramStartPos]] = clientData;
             Logger::log(INFO, "Client " + clientData->getClientNickname() + " set nickname to " + messageToExecute.mMessageTokens[0]);
 
@@ -652,8 +676,9 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             if (clientData->getIsNickSet() == true && clientData->getIsUserSet() == true)
             {
+                if (clientData->getIsReadyToChat() == false)
+                    Server::sendWelcomeMessageToClientData(clientData);
                 clientData->setIsReadyToChat(true);
-                Server::sendWelcomeMessageToClientData(clientData);
             }
 
             break;
@@ -835,7 +860,8 @@ void Server::executeParsedMessages(ClientData* clientData)
                     return;
                 }
                 channelNames.push_back(channelName);
-                posStart = posEnd + 1;
+                messageToExecute.mMessageTokens[paramStartPos].erase(posStart, posEnd + 1); 
+                posStart = 0;
                 posEnd = messageToExecute.mMessageTokens[paramStartPos].find(',', posStart);
             }
             // add last channel to channelNames vector
@@ -1043,10 +1069,6 @@ void Server::executeParsedMessages(ClientData* clientData)
                         Server::logClientData(clientData);
                         continue;
                     }
-                    newChannel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
-                    newChannel->getNickToOperatorClientsMap()[clientData->getClientNickname()] = clientData;
-                    clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(newChannel->getName(), newChannel));
-
                     Message joinMessageToChannel;
 
                     joinMessageToChannel.mCommand = JOIN;
@@ -1055,6 +1077,11 @@ void Server::executeParsedMessages(ClientData* clientData)
                     joinMessageToChannel.mMessageTokens.push_back("JOIN");
                     joinMessageToChannel.mMessageTokens.push_back(newChannel->getName());
                     Server::sendMessagetoChannel(newChannel, joinMessageToChannel);
+
+                    newChannel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
+                    newChannel->getNickToOperatorClientsMap()[clientData->getClientNickname()] = clientData;
+                    clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(newChannel->getName(), newChannel));
+
                     sendChannelJoinSucessMessageToClientData(clientData, newChannel);
 
                     Logger::log(INFO, "Channel created without password");
@@ -1106,9 +1133,6 @@ void Server::executeParsedMessages(ClientData* clientData)
                     {
                         if (channelKeys.size() > i && channelKeys[i] == channel->getPassword())
                         {
-                            channel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
-                            clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
-
                             Message joinMessageToChannel;
                             joinMessageToChannel.mCommand = JOIN;
                             joinMessageToChannel.mHasPrefix = true;
@@ -1118,6 +1142,9 @@ void Server::executeParsedMessages(ClientData* clientData)
                             Server::sendMessagetoChannel(channel, joinMessageToChannel);
                             sendChannelJoinSucessMessageToClientData(clientData, channel);
 
+                            channel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
+                            clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
+                         
                             Logger::log(INFO, clientData->getClientNickname() + " joined Channel " + channel->getName() + " with password");
                             Server::logClientData(clientData);
 
@@ -1134,10 +1161,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                             continue;
                         }
                     }
-
-                    channel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
-                    clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
-
+                    
                     Message joinMessageToChannel;
                     joinMessageToChannel.mCommand = JOIN;
                     joinMessageToChannel.mHasPrefix = true;
@@ -1145,9 +1169,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     joinMessageToChannel.mMessageTokens.push_back("JOIN");
                     joinMessageToChannel.mMessageTokens.push_back(channel->getName());
                     Server::sendMessagetoChannel(channel, joinMessageToChannel);
-
-
                     Server::sendChannelJoinSucessMessageToClientData(clientData, channel);
+
+                    channel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
+                    clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
    
                     Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + channel->getName());
                     Server::logClientData(clientData);
@@ -1407,7 +1432,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     clientMessage.mCommand = PRIVMSG;
                     clientMessage.mMessageTokens.clear();
                     clientMessage.mHasPrefix = true;
-                    clientMessage.mMessageTokens.push_back(clientData->getClientNickname());
+                    clientMessage.mMessageTokens.push_back(":" + clientData->getClientNickname());
                     clientMessage.mMessageTokens.push_back("PRIVMSG");
                     clientMessage.mMessageTokens.push_back(channel->getName());
                     clientMessage.mMessageTokens.push_back(text);
@@ -1434,7 +1459,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     clientMessage.mCommand = PRIVMSG;
                     clientMessage.mMessageTokens.clear();
                     clientMessage.mHasPrefix = true;
-                    clientMessage.mMessageTokens.push_back(clientData->getClientNickname());
+                    clientMessage.mMessageTokens.push_back(":" + clientData->getClientNickname());
                     clientMessage.mMessageTokens.push_back("PRIVMSG");
                     clientMessage.mMessageTokens.push_back(recipient);
                     clientMessage.mMessageTokens.push_back(text);
