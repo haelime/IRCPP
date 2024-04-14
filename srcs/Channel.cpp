@@ -1,9 +1,12 @@
 #include "Channel.hpp"
 
-const Message Channel::getNameReply(const ClientData *requestClient)
+// 353
+const Message Channel::getNameReply(sockaddr_in *serverAddr , const ClientData *requestClient)
 {
     Message reply;
     reply.mCommand = NONE;
+    reply.mHasPrefix = true;
+    reply.mMessageTokens.push_back(":" + std::string(inet_ntoa(serverAddr->sin_addr)));
     reply.mMessageTokens.push_back(RPL_NAMREPLY);
     reply.mMessageTokens.push_back(requestClient->getClientNickname());
     reply.mMessageTokens.push_back("=");
@@ -22,13 +25,16 @@ const Message Channel::getNameReply(const ClientData *requestClient)
     return reply;
 }
 
-const Message Channel::getEndOfNames(const ClientData *requestClient)
+// 366
+const Message Channel::getEndOfNames(sockaddr_in *serverAddr ,const ClientData *requestClient)
 {
     Message reply;
     reply.mCommand = NONE;
+    reply.mHasPrefix = true;
+    reply.mMessageTokens.push_back(":" + std::string(inet_ntoa(serverAddr->sin_addr)));
     reply.mMessageTokens.push_back(RPL_ENDOFNAMES);
     reply.mMessageTokens.push_back(requestClient->getClientNickname());
     reply.mMessageTokens.push_back(mChannelName);
-    reply.mMessageTokens.push_back("End of /NAMES list.");
+    reply.mMessageTokens.push_back(":End of /NAMES list.");
     return reply;
 }

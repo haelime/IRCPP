@@ -723,9 +723,6 @@ void Server::executeParsedMessages(ClientData* clientData)
             break;
         case JOIN:
 
-            // TODO!!!!!!!!!!!!!!!!!!!!!!!!! CHECK ISREGISTERED EVERY CASES !!!!!!!!!!!!!!!!!!!!!!!!
-
-
             // Parameters: <channel>{,<channel>} [<key>{,<key>}]
 
             // The JOIN command is used by client to start listening a specific
@@ -986,29 +983,26 @@ void Server::executeParsedMessages(ClientData* clientData)
                 std::map<std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(channelNames[i]);
 
                
-
+                // 채널이 없을 때
                 if (channelIter == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(DEBUG, "Channel not found, creating new channel");
                     Channel* newChannel = new Channel(channelNames[i]);
                     mNameToChannelGlobalMap.insert(std::pair<std::string, Channel*>(channelNames[i], newChannel));
 
-                    // Message joinMessageToClient;
-                    // joinMessageToClient.mCommand = JOIN;
-                    // joinMessageToClient.mHasPrefix = true;
-                    // joinMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
-                    // joinMessageToClient.mMessageTokens.push_back("JOIN");
-                    // joinMessageToClient.mMessageTokens.push_back(newChannel->getName());
-                    // clientData->getServerToClientSendQueue().push(joinMessageToClient);
+                    // 클라이언트한테 보내는 첫빠따
+                    Message joinMessageToClient;
+                    joinMessageToClient.mCommand = JOIN;
+                    joinMessageToClient.mHasPrefix = true;
+                    joinMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                    joinMessageToClient.mMessageTokens.push_back("JOIN");
+                    joinMessageToClient.mMessageTokens.push_back(newChannel->getName());
+                    clientData->getServerToClientSendQueue().push(joinMessageToClient);
 
+                    // 채널에 비밀번호가 있을 때
                     if (channelKeys.size() > i)
                     {
-
-                        newChannel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
-                        newChannel->getNickToOperatorClientsMap()[clientData->getClientNickname()] = clientData;
-                        clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(newChannel->getName(), newChannel));
-
-                        newChannel->setPassword(channelKeys[i]);
+                        // 채널에 보내는 메시지
                         Message joinMessageToChannel;
                         joinMessageToChannel.mCommand = JOIN;
                         joinMessageToChannel.mHasPrefix = true;
@@ -1016,7 +1010,17 @@ void Server::executeParsedMessages(ClientData* clientData)
                         joinMessageToChannel.mMessageTokens.push_back("JOIN");
                         joinMessageToChannel.mMessageTokens.push_back(newChannel->getName());
                         Server::sendMessagetoChannel(newChannel, joinMessageToChannel);
+
+                        // 채널 클라 상호 연결
+                        newChannel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
+                        newChannel->getNickToOperatorClientsMap()[clientData->getClientNickname()] = clientData;
+                        clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(newChannel->getName(), newChannel));
+
+                        // 332 353 366 to client (topic, names, endofnames)
                         Server::sendChannelJoinSucessMessageToClientData(clientData, newChannel);
+
+                        newChannel->setPassword(channelKeys[i]);
+
                         Logger::log(INFO, "Channel created with password");
                         Logger::log(INFO, clientData->getClientNickname() + " joined Channel " + newChannel->getName() + " with password");
                         Server::logClientData(clientData);
@@ -1027,12 +1031,13 @@ void Server::executeParsedMessages(ClientData* clientData)
                     clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(newChannel->getName(), newChannel));
 
                     Message joinMessageToChannel;
-                    joinMessageToChannel.mCommand = JOIN;
+                    joinMessageToChannel.mCommand = NONE;
                     joinMessageToChannel.mHasPrefix = true;
                     joinMessageToChannel.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                     joinMessageToChannel.mMessageTokens.push_back("JOIN");
                     joinMessageToChannel.mMessageTokens.push_back(newChannel->getName());
                     Server::sendMessagetoChannel(newChannel, joinMessageToChannel);
+
                     sendChannelJoinSucessMessageToClientData(clientData, newChannel);
 
                     Logger::log(INFO, "Channel created without password");
@@ -1044,13 +1049,14 @@ void Server::executeParsedMessages(ClientData* clientData)
                 {
                     Channel* channel = channelIter->second;
 
-                    // Message joinMessageToClient;
-                    // joinMessageToClient.mCommand = JOIN;
-                    // joinMessageToClient.mHasPrefix = true;
-                    // joinMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
-                    // joinMessageToClient.mMessageTokens.push_back("JOIN");
-                    // joinMessageToClient.mMessageTokens.push_back(channel->getName());
-                    // clientData->getServerToClientSendQueue().push(joinMessageToClient);
+                    // 클라이언트한테 보내는 첫빠따
+                    Message joinMessageToClient;
+                    joinMessageToClient.mCommand = JOIN;
+                    joinMessageToClient.mHasPrefix = true;
+                    joinMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                    joinMessageToClient.mMessageTokens.push_back("JOIN");
+                    joinMessageToClient.mMessageTokens.push_back(channel->getName());
+                    clientData->getServerToClientSendQueue().push(joinMessageToClient);
                                                 
                     if (channel == NULL)
                     {
@@ -1087,12 +1093,13 @@ void Server::executeParsedMessages(ClientData* clientData)
                             clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
 
                             Message joinMessageToChannel;
-                            joinMessageToChannel.mCommand = JOIN;
+                            joinMessageToChannel.mCommand = NONE;
                             joinMessageToChannel.mHasPrefix = true;
                             joinMessageToChannel.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                             joinMessageToChannel.mMessageTokens.push_back("JOIN");
                             joinMessageToChannel.mMessageTokens.push_back(channel->getName());
                             Server::sendMessagetoChannel(channel, joinMessageToChannel);
+
                             sendChannelJoinSucessMessageToClientData(clientData, channel);
 
                             Logger::log(INFO, clientData->getClientNickname() + " joined Channel " + channel->getName() + " with password");
@@ -1115,14 +1122,16 @@ void Server::executeParsedMessages(ClientData* clientData)
                     channel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
                     clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
 
-                    Server::sendChannelJoinSucessMessageToClientData(clientData, channel);
                     Message joinMessageToChannel;
-                    joinMessageToChannel.mCommand = JOIN;
+                    joinMessageToChannel.mCommand = NONE;
                     joinMessageToChannel.mHasPrefix = true;
                     joinMessageToChannel.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                     joinMessageToChannel.mMessageTokens.push_back("JOIN");
                     joinMessageToChannel.mMessageTokens.push_back(channel->getName());
                     Server::sendMessagetoChannel(channel, joinMessageToChannel);
+
+
+                    Server::sendChannelJoinSucessMessageToClientData(clientData, channel);
    
                     Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + channel->getName());
                     Server::logClientData(clientData);
@@ -1543,11 +1552,25 @@ void Server::executeParsedMessages(ClientData* clientData)
                     return;
                 }
 
-                if (mNameToChannelGlobalMap.find(channelName) == mNameToChannelGlobalMap.end())
+                std::map <std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(channelName);
+
+                if (channelIter == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
                     errMessageToClient.mMessageTokens.push_back(":Channel not found");
+                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                    Server::logClientData(clientData);
+                    return;
+                }
+
+                // is user operator
+                Channel* channel = channelIter->second;
+                if (channel->getNickToOperatorClientsMap().find(clientData->getClientNickname()) == channel->getNickToOperatorClientsMap().end())
+                {
+                    Logger::log(ERROR, "Client is not operator, sending ERR_CHANOPRIVSNEEDED");
+                    errMessageToClient.mMessageTokens.push_back(ERR_CHANOPRIVSNEEDED);
+                    errMessageToClient.mMessageTokens.push_back(":Client is not operator");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
@@ -1573,18 +1596,6 @@ void Server::executeParsedMessages(ClientData* clientData)
                     Server::logClientData(clientData);
                     return;
                 }
-
-                // check client is operator
-                Channel* channel = mNameToChannelGlobalMap.find(channelName)->second;
-                // if (channel->getOperatorClient() != clientData)
-                // {
-                //     Logger::log(ERROR, "Client is not operator, sending ERR_CHANOPRIVSNEEDED");
-                //     errMessageToClient.mMessageTokens.push_back(ERR_CHANOPRIVSNEEDED);
-                //     errMessageToClient.mMessageTokens.push_back("Client is not operator");
-                //     clientData->getServerToClientSendQueue().push(errMessageToClient);
-                //     Server::logClientData(clientData);
-                //     return;
-                // }
 
                 if (channel->getNickToClientDataMap().find(userToKick) == channel->getNickToClientDataMap().end())
                 {
@@ -2772,32 +2783,33 @@ void Server::sendChannelJoinSucessMessageToClientData(ClientData* clientData, Ch
     // 332    RPL_TOPIC
     if (channel->getTopic().length() > 0)
     {
-        successMessageToClient.mCommand = JOIN;
+        successMessageToClient.mCommand = NONE;
         successMessageToClient.mMessageTokens.clear();
         successMessageToClient.mHasPrefix = true;
-        successMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname());
+        // prifix = :address of the server
+        successMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(mServerAddress.sin_addr)));
         successMessageToClient.mMessageTokens.push_back("332");
         successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
         successMessageToClient.mMessageTokens.push_back(channel->getName());
-        successMessageToClient.mMessageTokens.push_back(channel->getTopic());
+        successMessageToClient.mMessageTokens.push_back(":" + channel->getTopic());
         clientData->getServerToClientSendQueue().push(successMessageToClient);
     }
     // 331    RPL_NOTOPIC
     else if (channel->getTopic().length() == 0)
     {
-        successMessageToClient.mCommand = JOIN;
+        successMessageToClient.mCommand = NONE;
         successMessageToClient.mMessageTokens.clear();
         successMessageToClient.mHasPrefix = true;
-        successMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname());
+        successMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(mServerAddress.sin_addr)));
         successMessageToClient.mMessageTokens.push_back("331");
         successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
         successMessageToClient.mMessageTokens.push_back(channel->getName());
-        successMessageToClient.mMessageTokens.push_back("No topic is set");
+        successMessageToClient.mMessageTokens.push_back(":No topic is set");
         clientData->getServerToClientSendQueue().push(successMessageToClient);
     }
 
     // 353    RPL_NAMREPLY
-    Message nameReply = channel->getNameReply(clientData);
+    Message nameReply = channel->getNameReply(&mServerAddress, clientData);
 
     clientData->getServerToClientSendQueue().push(nameReply);
 
@@ -2805,7 +2817,7 @@ void Server::sendChannelJoinSucessMessageToClientData(ClientData* clientData, Ch
 
     Message endOfNames;
 
-    endOfNames = channel->getEndOfNames(clientData);
+    endOfNames = channel->getEndOfNames(&mServerAddress, clientData);
 
     clientData->getServerToClientSendQueue().push(endOfNames);
 

@@ -55,10 +55,10 @@ public: // getter, setters
     const int& getUserLimit() const { return mUserLimit; };
 
     // 353 RPL_NAMREPLY
-    const Message getNameReply(const ClientData *requestClient);
+    const Message getNameReply(sockaddr_in* serverAddr, const ClientData* requestClient);
 
     // 366 RPL_ENDOFNAMES
-    const Message getEndOfNames(const ClientData *requestClient);
+    const Message getEndOfNames(sockaddr_in* serverAddr, const ClientData *requestClient);
 
     std::map<std::string, ClientData *> &getNickToClientDataMap() { return mNickToClientDataMap; };
     std::map<std::string, ClientData *> &getNickToOperatorClientsMap() { return mNickToOperatorClientsMap; };
