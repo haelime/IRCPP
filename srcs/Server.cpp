@@ -351,15 +351,35 @@ void Server::run()
                     assert(0);
                     continue;
                 }
-                // Logger::log(DEBUG, "ClientData object found");
-
-                // Make message to send from message tokens
+                
+                // Make message to send from message tokens if there is no remaining in sendBuffer
                 // :<Server Name> <Message> \r\n
-                std::string sendMsg;
-                while (!clientData->getServerToClientSendQueue().empty())
-                {
-                    // Logger::log(ERROR, "ServerToClientSendQueue is empty, ignore sending message");
 
+                if (clientData->getSendBuffer().empty())
+                {
+                    // No exist messages to send
+                    if (clientData->getServerToClientSendQueue().empty())
+                    {
+                        // Disable EVFILT_WRITE filter when the message is fully sent
+                        struct kevent newSendEvent;
+                        memset(&newSendEvent, 0, sizeof(newSendEvent));
+                        newSendEvent.ident = clientFD;
+                        newSendEvent.filter = EVFILT_WRITE;
+                        newSendEvent.flags = EV_DELETE;
+                        newSendEvent.data = 0;
+                        newSendEvent.udata = NULL;
+                        if (kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL) == -1)
+                        {
+                            Logger::log(ERROR, "Failed to disable EVFILT_WRITE event");
+                            std::perror("kevent");
+                            close(clientFD);
+                            assert(false);
+                            continue;
+                        }
+                        continue;
+                    }
+
+                    std::string sendMsg;
                     if (clientData->getServerToClientSendQueue().front().mHasPrefix == false)
                         sendMsg = ":" + std::string(inet_ntoa(mServerAddress.sin_addr)) + " ";
                     std::vector<std::string> messageTokens = clientData->getServerToClientSendQueue().front().mMessageTokens;
@@ -376,39 +396,35 @@ void Server::run()
                         Logger::log(SEND, clientData->getClientNickname() + " : " + sendMsg);
                     sendMsg += "\r\n";
 
-                    const int sendMsgLength = send(clientFD, sendMsg.c_str(), sendMsg.length(), 0);
-                    if (SOCKET_ERROR == sendMsgLength)
-                    {
-                        Logger::log(ERROR, "Failed to send message to client");
-                        std::perror("send");
-                        close(clientFD);
-                        assert(0);
-                        continue;
-                    }
-
                     // Pop message from queue
                     clientData->getServerToClientSendQueue().pop();
-                }
+                    
+                    // Set sending buffer by sendMsg
+                    clientData->setSendBuffer(sendMsg);
+                }          
 
-                // Disable EVFILT_WRITE filter when the message is fully sent
-                struct kevent newSendEvent;
-                memset(&newSendEvent, 0, sizeof(newSendEvent));
-                newSendEvent.ident = clientFD;
-                newSendEvent.filter = EVFILT_WRITE;
-                newSendEvent.flags = EV_DELETE;
-                newSendEvent.data = 0;
-                newSendEvent.udata = NULL;
-                if (kevent(mhKqueue, &newSendEvent, 1, NULL, 0, NULL) == -1)
+                // Send to client
+                std::string buffToSend = clientData->getSendBuffer();
+                const int sendMsgLength = send(clientFD, buffToSend.c_str(), buffToSend.length(), 0);
+                if (SOCKET_ERROR == sendMsgLength)
                 {
-                    Logger::log(ERROR, "Failed to disable EVFILT_WRITE event");
-                    std::perror("kevent");
+                    Logger::log(ERROR, "Failed to send message to client");
+                    std::perror("send");
                     close(clientFD);
-                    assert(false);
+                    assert(0);
                     continue;
                 }
 
-                // Find the clientData
+                // Maybe kernel buffer or client receive buffer is full
+                else if (sendMsgLength == 0)
 
+                {
+                   continue; 
+                }
+
+                // Remove the part of sent
+                buffToSend.erase(0, sendMsgLength);
+                clientData->setSendBuffer(buffToSend);
             }
         }
 
@@ -983,6 +999,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 std::map<std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(channelNames[i]);
 
                
+
                 // 채널이 없을 때
                 if (channelIter == mNameToChannelGlobalMap.end())
                 {
@@ -1031,13 +1048,13 @@ void Server::executeParsedMessages(ClientData* clientData)
                     clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(newChannel->getName(), newChannel));
 
                     Message joinMessageToChannel;
-                    joinMessageToChannel.mCommand = NONE;
+
+                    joinMessageToChannel.mCommand = JOIN;
                     joinMessageToChannel.mHasPrefix = true;
                     joinMessageToChannel.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                     joinMessageToChannel.mMessageTokens.push_back("JOIN");
                     joinMessageToChannel.mMessageTokens.push_back(newChannel->getName());
                     Server::sendMessagetoChannel(newChannel, joinMessageToChannel);
-
                     sendChannelJoinSucessMessageToClientData(clientData, newChannel);
 
                     Logger::log(INFO, "Channel created without password");
@@ -1093,13 +1110,12 @@ void Server::executeParsedMessages(ClientData* clientData)
                             clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
 
                             Message joinMessageToChannel;
-                            joinMessageToChannel.mCommand = NONE;
+                            joinMessageToChannel.mCommand = JOIN;
                             joinMessageToChannel.mHasPrefix = true;
                             joinMessageToChannel.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                             joinMessageToChannel.mMessageTokens.push_back("JOIN");
                             joinMessageToChannel.mMessageTokens.push_back(channel->getName());
                             Server::sendMessagetoChannel(channel, joinMessageToChannel);
-
                             sendChannelJoinSucessMessageToClientData(clientData, channel);
 
                             Logger::log(INFO, clientData->getClientNickname() + " joined Channel " + channel->getName() + " with password");
@@ -1123,7 +1139,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
 
                     Message joinMessageToChannel;
-                    joinMessageToChannel.mCommand = NONE;
+                    joinMessageToChannel.mCommand = JOIN;
                     joinMessageToChannel.mHasPrefix = true;
                     joinMessageToChannel.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                     joinMessageToChannel.mMessageTokens.push_back("JOIN");
@@ -1314,7 +1330,6 @@ void Server::executeParsedMessages(ClientData* clientData)
             // ERR_CANNOTSENDTOCHAN           ERR_NOTOPLEVEL
             // ERR_WILDTOPLEVEL               ERR_TOOMANYTARGETS
             // ERR_NOSUCHNICK                 ERR_NOSUCHSERVER
-            // ERR_AWAY
 
             // Examples:
 
@@ -1335,7 +1350,7 @@ void Server::executeParsedMessages(ClientData* clientData)
             Server::logMessage(messageToExecute);
 
             // check if there is a recipient
-            if (messageToExecute.mMessageTokens.size() < paramStartPos + 2)
+            if (messageToExecute.mMessageTokens.size() < paramStartPos + 1)
             {
                 Logger::log(ERROR, "No recipient, sending ERR_NORECIPIENT");
                 errMessageToClient.mMessageTokens.push_back(ERR_NORECIPIENT);
@@ -1346,7 +1361,7 @@ void Server::executeParsedMessages(ClientData* clientData)
             }
 
             // check if there is a text to send
-            if (messageToExecute.mMessageTokens.size() < paramStartPos + 3)
+            if (messageToExecute.mMessageTokens.size() < paramStartPos + 2)
             {
                 Logger::log(ERROR, "No text to send, sending ERR_NOTEXTTOSEND");
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTEXTTOSEND);
@@ -1851,7 +1866,6 @@ void Server::executeParsedMessages(ClientData* clientData)
 
             {//     Command: MODE
             // Parameters: <channel> *( ( "-" / "+" ) *<modes> *<modeparams> )
-
             // The MODE command is provided so that users may query and change the
             // characteristics of a channel.  For more details on available modes
             // and their uses, see "Internet Relay Chat: Channel Management" [IRC-
@@ -2251,7 +2265,6 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
         Logger::log(DEBUG, "ClientData's receivedString : " + messageStr);
         Logger::log(DEBUG, "Erasing message from clientData's receivedString");
         clientData->setReceivedString(str);
-
 
 
         // check if the messageToExecute has prefix, it's always a NICKNAME
@@ -2786,6 +2799,7 @@ void Server::sendChannelJoinSucessMessageToClientData(ClientData* clientData, Ch
         successMessageToClient.mCommand = NONE;
         successMessageToClient.mMessageTokens.clear();
         successMessageToClient.mHasPrefix = true;
+
         // prifix = :address of the server
         successMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(mServerAddress.sin_addr)));
         successMessageToClient.mMessageTokens.push_back("332");
@@ -2800,6 +2814,7 @@ void Server::sendChannelJoinSucessMessageToClientData(ClientData* clientData, Ch
         successMessageToClient.mCommand = NONE;
         successMessageToClient.mMessageTokens.clear();
         successMessageToClient.mHasPrefix = true;
+
         successMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(mServerAddress.sin_addr)));
         successMessageToClient.mMessageTokens.push_back("331");
         successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
@@ -2839,7 +2854,6 @@ void Server::sendMessagetoChannel(Channel* channel, const Message& message)
         }
     }
 }
-
 void Server::sendWelcomeMessageToClientData(ClientData* clientData)
 {
     Message successMessageToClient;

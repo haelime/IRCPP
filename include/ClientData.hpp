@@ -65,6 +65,9 @@ public: // getter, setters
     void    setIp(std::string& ip) { mClientIp = ip; };
     const std::string& getIp() const { return mClientIp; };
 
+    std::string getSendBuffer() { return mSendBuffer; }
+    void  setSendBuffer(std::string str) { mSendBuffer = str; }
+
     std::queue <Message>& getServerToClientSendQueue() { return mServerToClientSendQueue; };
     std::map <std::string, Channel*>& getConnectedChannels() { return mNameToConnectedChannelMap; };
     std::queue <Message> &getExecuteMessageQueue() { return mParsedMessageQueue; };
@@ -98,6 +101,7 @@ private:
 
     // send queue, first vector is the command, least are the params
     std::queue <Message>  mServerToClientSendQueue;
+    std::string mSendBuffer;
 
     bool mIsPassed;
     bool mIsNickSet;
