@@ -72,6 +72,8 @@ private:
     void sendChannelJoinSucessMessageToClientData(ClientData *clientData, Channel *channel);
     void sendMessagetoChannel(Channel* channel, const Message& message);
 
+    void sendWelcomeMessageToClientData(ClientData *clientData);
+
 private:  // server network data
     SOCKET_FD mServerListenSocket;
     sockaddr_in mServerAddress;
