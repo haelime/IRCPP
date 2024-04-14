@@ -91,3 +91,4 @@ typedef std::string ERROR_NUM_STRING;
 #define RPL_CHANNELMODEIS "324"
 #define ERR_KEYSET "467"
 #define ERR_NICKNAMEINUSE "433"
+#define ERR_NICKCOLLISION "436"
