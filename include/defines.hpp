@@ -1,5 +1,6 @@
 #pragma once
 
+#define IP_ADDRESS "10.18.234.170"
 #define SERVER_NAME "ircserv"
 #define SERVER_VERSION "0.1"
 

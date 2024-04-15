@@ -3,7 +3,7 @@ TARGET = ircserv
 CXX = c++
 
 CXXFLAGS = -Wall -Werror -Wextra -std=c++98\
--g -fsanitize=address # DEBUG
+# -g -fsanitize=address # DEBUG
 
 CWD = $(shell pwd)
 SRCDIR = $(CWD)/srcs

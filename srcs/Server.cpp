@@ -27,7 +27,10 @@ bool Server::initServer(int argc, char** argv)
     Logger::log(DEBUG, "Server created socket");
 
     // Set Server's address
-    mServerAddress.sin_addr.s_addr = INADDR_ANY;
+    const char *ip_address = IP_ADDRESS;
+    mServerAddress.sin_addr.s_addr = inet_addr(ip_address);
+
+    // mServerAddress.sin_addr.s_addr = INADDR_ANY;
     mServerAddress.sin_port = htons(mPort);
     mServerAddress.sin_family = AF_INET;
     mServerAddress.sin_len = sizeof(mServerAddress);
@@ -2597,7 +2600,7 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NICKNAMEINUSE);
                 errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
-                errMessageToClient.mMessageTokens.push_back(":Nickname collision");
+                errMessageToClient.mMessageTokens.push_back(":*** Nickname is already in use");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 assert(false);
                 continue;
