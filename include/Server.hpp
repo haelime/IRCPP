@@ -4,11 +4,14 @@
 #include <sys/event.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <cassert>
 
 #include <iostream>
 #include <string>
 #include <vector>
 #include <utility>
+#include <cstring>
+#include <cstdlib>
 
 #include "defines.hpp"
 #include "ClientData.hpp"

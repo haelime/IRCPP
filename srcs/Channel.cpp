@@ -20,7 +20,7 @@ const Message Channel::getNameReply(sockaddr_in *serverAddr , const ClientData *
             names += "@";
         names += it->first + " ";
     }
-    names.pop_back();
+    names.erase(names.length()-1, 1);
     reply.mMessageTokens.push_back(names);
     return reply;
 }

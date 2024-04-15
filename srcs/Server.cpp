@@ -33,13 +33,13 @@ bool Server::initServer(int argc, char** argv)
     // mServerAddress.sin_addr.s_addr = INADDR_ANY;
     mServerAddress.sin_port = htons(mPort);
     mServerAddress.sin_family = AF_INET;
-    mServerAddress.sin_len = sizeof(mServerAddress);
-    mServerAddressLength = mServerAddress.sin_len;
+    // mServerAddress.sin_len = sizeof(mServerAddress);
+    // mServerAddressLength = mServerAddress.sin_len;
 
     // Bind listen socket
     Logger::log(DEBUG, "Server is binding socket...");
     if (SOCKET_ERROR == bind(mServerListenSocket, (const sockaddr*)&mServerAddress,
-        mServerAddressLength))
+        sizeof(mServerAddress)))
     {
         Logger::log(ERROR, "Failed to bind socket");
         Logger::log(ERROR, "Probably port is already in use");
@@ -2336,7 +2336,12 @@ void Server::executeParsedMessages(ClientData* clientData)
                             break;
 
                         case 'l':
-                            channel->setUserLimit(std::stoi(modeParams));
+                            for (size_t i = 0; i< modeParams.length(); i++)
+                            {
+                                if (!isdigit(modeParams[i]))
+                                    return;
+                            }
+                            channel->setUserLimit(std::atoi(modeParams.c_str()));
                             break;
 
                         default:
@@ -3228,7 +3233,7 @@ void Server::sendWelcomeMessageToClientData(ClientData* clientData)
         successMessageToClient.mMessageTokens.push_back(RPL_CREATED);
         successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
         std::string timeNow = std::ctime(&mServerStartTime);
-        timeNow.pop_back();
+        timeNow.erase(timeNow.length()-1, 1);
         successMessageToClient.mMessageTokens.push_back(":This server was created " + timeNow);
         clientData->getServerToClientSendQueue().push(successMessageToClient);
     }

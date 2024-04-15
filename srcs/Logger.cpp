@@ -1,3 +1,5 @@
+#include <cassert>
+
 #include "Logger.hpp"
 
 // There is A LOT to REFACTOR here.
@@ -16,7 +18,7 @@ void Logger::setFileLogging(const std::string& fileName)
 {
     mIsFileLogging = true;
     mFileName = fileName;
-    logFile.open(mFileName, std::ios::out | std::ios::app);
+    logFile.open(mFileName.c_str(), std::ios::out | std::ios::app);
     if (logFile.fail())
     {
         Logger::log(ERROR, "Failed to open log file, logging on console only");
