@@ -43,7 +43,7 @@ public: // getter, setters
     void setInviteOnly(bool isInviteOnly) { mIsInviteOnly = isInviteOnly; };
     void setTopicRestricted(bool isTopicRestricted) { mIsTopicRestricted = isTopicRestricted; };
     void setKeyProtected(bool isKeyProtected) { mIsKeyProtected = isKeyProtected; };
-    void setUserLimit(int userLimit) { mUserLimit = userLimit; };
+    void setUserLimit(size_t userLimit) { mUserLimit = userLimit; };
     
     const std::string &getTopic() const { return mTopic; };
     const std::string &getMode() const { return mMode; };
@@ -52,7 +52,7 @@ public: // getter, setters
     const bool& getIsInviteOnly() const { return mIsInviteOnly; };
     const bool& getIsTopicRestricted() const { return mIsTopicRestricted; };
     const bool& getIsKeyProtected() const { return mIsKeyProtected; };
-    const int& getUserLimit() const { return mUserLimit; };
+    const size_t& getUserLimit() const { return mUserLimit; };
 
     // 353 RPL_NAMREPLY
     const Message getNameReply(sockaddr_in* serverAddr, const ClientData* requestClient);
@@ -77,7 +77,7 @@ private: // data
     bool        mIsInviteOnly;
     bool        mIsTopicRestricted;
     bool        mIsKeyProtected;
-    int         mUserLimit;
+    size_t         mUserLimit;
 
     // when a client joins a channel, the server will create this class and add the client to the vector
     std::map<std::string, ClientData *> mNickToClientDataMap;

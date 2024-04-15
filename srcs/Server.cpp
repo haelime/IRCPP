@@ -287,7 +287,7 @@ void Server::run()
                         Server::logClientData(clientData);
 
                         // Delete clientData object
-                       Server::disconnectClientDataFromServer(clientData);
+                        Server::disconnectClientDataFromServer(clientData);
                         continue;
                     }
 
@@ -326,7 +326,7 @@ void Server::run()
                     if (recvMsgStr == "\r\n")
                         continue;
 
-                        clientData->appendReceivedString(recvMsgStr);
+                    clientData->appendReceivedString(recvMsgStr);
 
                 }
             }
@@ -354,7 +354,7 @@ void Server::run()
                     assert(0);
                     continue;
                 }
-                
+
                 // Make message to send from message tokens if there is no remaining in sendBuffer
                 // :<Server Name> <Message> \r\n
 
@@ -363,7 +363,7 @@ void Server::run()
                     // No exist messages to send
                     if (clientData->getServerToClientSendQueue().empty())
                     {
-                        continue;  
+                        continue;
                     }
 
                     std::string sendMsg;
@@ -385,10 +385,10 @@ void Server::run()
 
                     // Pop message from queue
                     clientData->getServerToClientSendQueue().pop();
-                    
+
                     // Set sending buffer by sendMsg
                     clientData->setSendBuffer(sendMsg);
-                }          
+                }
 
                 // Send to client
                 std::string buffToSend = clientData->getSendBuffer();
@@ -404,7 +404,7 @@ void Server::run()
                 // Maybe kernel buffer or client receive buffer is full
                 else if (sendMsgLength == 0)
                 {
-                   continue; 
+                    continue;
                 }
 
                 // Remove the part of sent
@@ -623,7 +623,10 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":*** You have not registered");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
 
@@ -636,7 +639,10 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NICKNAMEINUSE);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":*** Nickname is already in use");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
 
@@ -714,7 +720,10 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":*** You have not registered");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
 
@@ -816,7 +825,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":You have not registered yet");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -834,7 +846,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelName.length() == 0)
                 {
                     Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -843,7 +858,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
                 {
                     Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -852,14 +870,17 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName[0] != '#' && channelName[0] != '&')
                 {
                     Logger::log(ERROR, "Channel name is invalid, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is invalid");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
                     return;
                 }
                 channelNames.push_back(channelName);
-                messageToExecute.mMessageTokens[paramStartPos].erase(posStart, posEnd + 1); 
+                messageToExecute.mMessageTokens[paramStartPos].erase(posStart, posEnd + 1);
                 posStart = 0;
                 posEnd = messageToExecute.mMessageTokens[paramStartPos].find(',', posStart);
             }
@@ -869,6 +890,9 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelName.length() == 0)
                 {
                     Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
                     errMessageToClient.mMessageTokens.push_back(":Channel name is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -878,6 +902,9 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
                 {
                     Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
                     errMessageToClient.mMessageTokens.push_back(":Channel name is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -887,6 +914,9 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName[0] != '#' && channelName[0] != '&')
                 {
                     Logger::log(ERROR, "Channel name is invalid, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
                     errMessageToClient.mMessageTokens.push_back(":Channel name is invalid");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -907,7 +937,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             else
             {
                 Logger::log(WARNING, "No channel names, sending ERR_NEEDMOREPARAMS");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":No channel names");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -925,7 +958,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     if (channelKey.length() == 0)
                     {
                         Logger::log(ERROR, "Channel key is empty, sending ERR_NEEDMOREPARAMS");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Channel key is empty");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         Server::logClientData(clientData);
@@ -934,7 +970,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     else if (channelKey.length() > MAX_CHANNEL_KEY_LENGTH)
                     {
                         Logger::log(ERROR, "Channel key is too long, sending ERR_BADCHANNELKEY");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_BADCHANNELKEY);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Channel key is too long");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         Server::logClientData(clientData);
@@ -948,6 +987,9 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelKey.length() == 0)
                 {
                     Logger::log(ERROR, "Channel key is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
                     errMessageToClient.mMessageTokens.push_back(":Channel key is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -957,7 +999,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelKey.length() > MAX_CHANNEL_KEY_LENGTH)
                 {
                     Logger::log(ERROR, "Channel key is too long, sending ERR_BADCHANNELKEY");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_BADCHANNELKEY);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel key is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1023,7 +1068,7 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 std::map<std::string, Channel*>::iterator channelIter = mNameToChannelGlobalMap.find(channelNames[i]);
 
-               
+
 
                 // 채널이 없을 때
                 if (channelIter == mNameToChannelGlobalMap.end())
@@ -1092,19 +1137,13 @@ void Server::executeParsedMessages(ClientData* clientData)
                 {
                     Channel* channel = channelIter->second;
 
-                    // 클라이언트한테 보내는 첫빠따
-                    Message joinMessageToClient;
-                    joinMessageToClient.mCommand = JOIN;
-                    joinMessageToClient.mHasPrefix = true;
-                    joinMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
-                    joinMessageToClient.mMessageTokens.push_back("JOIN");
-                    joinMessageToClient.mMessageTokens.push_back(channel->getName());
-                    clientData->getServerToClientSendQueue().push(joinMessageToClient);
-                                                
                     if (channel == NULL)
                     {
                         Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Channel not found");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         continue;
@@ -1113,8 +1152,23 @@ void Server::executeParsedMessages(ClientData* clientData)
                     if (channel->getIsInviteOnly() == true)
                     {
                         Logger::log(ERROR, "Channel is invite only, sending ERR_INVITEONLYCHAN");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_INVITEONLYCHAN);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Channel is invite only");
+                        clientData->getServerToClientSendQueue().push(errMessageToClient);
+                        return;
+                    }
+
+                    if (channel->getUserLimit() > 0 && channel->getNickToClientDataMap().size() >= channel->getUserLimit())
+                    {
+                        Logger::log(ERROR, "Channel is full, sending ERR_CHANNELISFULL");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                        errMessageToClient.mMessageTokens.push_back(ERR_CHANNELISFULL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                        errMessageToClient.mMessageTokens.push_back(":Channel is full");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         return;
                     }
@@ -1122,7 +1176,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     if (channel->getNickToClientDataMap().find(clientData->getClientNickname()) != channel->getNickToClientDataMap().end())
                     {
                         Logger::log(ERROR, "Client is already in the channel, sending ERR_ALREADYINCHANNEL");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_ALREADYINCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Client is already in the channel");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         return;
@@ -1130,8 +1187,17 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                     if (!channel->getPassword().empty())
                     {
-                        if (channelKeys.size() > i && channelKeys[i] == channel->getPassword())
+                        if (channelKeys.size() > i && channelKeys[i].length() == channel->getPassword().length() && channelKeys[i] == channel->getPassword())
                         {
+                            // 클라이언트한테 보내는 첫빠따
+                            Message joinMessageToClient;
+                            joinMessageToClient.mCommand = JOIN;
+                            joinMessageToClient.mHasPrefix = true;
+                            joinMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                            joinMessageToClient.mMessageTokens.push_back("JOIN");
+                            joinMessageToClient.mMessageTokens.push_back(channel->getName());
+                            clientData->getServerToClientSendQueue().push(joinMessageToClient);
+
                             Message joinMessageToChannel;
                             joinMessageToChannel.mCommand = JOIN;
                             joinMessageToChannel.mHasPrefix = true;
@@ -1143,7 +1209,7 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                             channel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
                             clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
-                         
+
                             Logger::log(INFO, clientData->getClientNickname() + " joined Channel " + channel->getName() + " with password");
                             Server::logClientData(clientData);
 
@@ -1154,13 +1220,24 @@ void Server::executeParsedMessages(ClientData* clientData)
                         else
                         {
                             Logger::log(WARNING, "Invalid password, sending ERR_BADCHANNELKEY");
+                            errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                             errMessageToClient.mMessageTokens.push_back(ERR_BADCHANNELKEY);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                             errMessageToClient.mMessageTokens.push_back(":Invalid password");
                             clientData->getServerToClientSendQueue().push(errMessageToClient);
                             continue;
                         }
                     }
-                    
+                    // 클라이언트한테 보내는 첫빠따
+                    Message joinMessageToClient;
+                    joinMessageToClient.mCommand = JOIN;
+                    joinMessageToClient.mHasPrefix = true;
+                    joinMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                    joinMessageToClient.mMessageTokens.push_back("JOIN");
+                    joinMessageToClient.mMessageTokens.push_back(channel->getName());
+                    clientData->getServerToClientSendQueue().push(joinMessageToClient);
+
                     Message joinMessageToChannel;
                     joinMessageToChannel.mCommand = JOIN;
                     joinMessageToChannel.mHasPrefix = true;
@@ -1172,17 +1249,17 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                     channel->getNickToClientDataMap()[clientData->getClientNickname()] = clientData;
                     clientData->getConnectedChannels().insert(std::pair<std::string, Channel*>(channel->getName(), channel));
-   
+
                     Logger::log(INFO, clientData->getClientNickname() + "joined Channel " + channel->getName());
                     Server::logClientData(clientData);
                     // send JOIN message to all clients in the channel
-               
+
                 }
             }
 
             break;
         case PART:
-{
+        {
             // ERR_NEEDMOREPARAMS              ERR_NOSUCHCHANNEL
             // ERR_NOTONCHANNEL
 
@@ -1202,7 +1279,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":You have not registered yet");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1221,7 +1301,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelName.length() == 0)
                 {
                     Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1230,7 +1313,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName[0] != '#' && channelName[0] != '&')
                 {
                     Logger::log(ERROR, "Invalid channel name, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Invalid channel name");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1240,7 +1326,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
                 {
                     Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1250,7 +1339,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (mNameToChannelGlobalMap.find(channelName) == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel not found");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1267,7 +1359,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelName.length() == 0)
                 {
                     Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1276,7 +1371,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName[0] != '#' && channelName[0] != '&')
                 {
                     Logger::log(ERROR, "Invalid channel name, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Invalid channel name");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1285,7 +1383,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
                 {
                     Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1295,7 +1396,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (mNameToChannelGlobalMap.find(channelName) == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel not found");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1326,7 +1430,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 clientPartMessage.mCommand = PART;
                 clientPartMessage.mMessageTokens.clear();
                 clientPartMessage.mHasPrefix = true;
-                clientPartMessage.mMessageTokens.push_back(":" + clientData->getClientNickname()+"!"+clientData->getUsername()+"@"+clientData->getHostname());
+                clientPartMessage.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                 clientPartMessage.mMessageTokens.push_back("PART");
                 clientPartMessage.mMessageTokens.push_back(channelNames[i]);
                 if (!reason.empty())
@@ -1337,7 +1441,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 channel->getNickToClientDataMap().erase(clientData->getClientNickname());
                 channel->getNickToOperatorClientsMap().erase(clientData->getClientNickname());
 
-                                // erase channel if no one is in it
+                // erase channel if no one is in it
                 if (channel->getNickToClientDataMap().empty())
                 {
                     delete channel;
@@ -1346,8 +1450,8 @@ void Server::executeParsedMessages(ClientData* clientData)
             }
 
             Logger::log(INFO, clientData->getClientNickname() + " left channels");
-}
-            break;
+        }
+        break;
         case PRIVMSG:
 
             // ERR_NORECIPIENT                ERR_NOTEXTTOSEND
@@ -1362,7 +1466,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":You have not registered yet");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1377,7 +1484,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (messageToExecute.mMessageTokens.size() < paramStartPos + 1)
             {
                 Logger::log(ERROR, "No recipient, sending ERR_NORECIPIENT");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NORECIPIENT);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":No recipient");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1388,7 +1498,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (messageToExecute.mMessageTokens.size() < paramStartPos + 2)
             {
                 Logger::log(ERROR, "No text to send, sending ERR_NOTEXTTOSEND");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTEXTTOSEND);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":No text to send");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1408,7 +1521,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     if (channelIter == mNameToChannelGlobalMap.end())
                     {
                         Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Channel not found");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         Server::logClientData(clientData);
@@ -1419,7 +1535,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     if (channel->getNickToClientDataMap().find(clientData->getClientNickname()) == channel->getNickToClientDataMap().end())
                     {
                         Logger::log(ERROR, "Client is not in the channel, sending ERR_CANNOTSENDTOCHAN");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_CANNOTSENDTOCHAN);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Client is not in the channel");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         Server::logClientData(clientData);
@@ -1444,7 +1563,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                     if (clientIter == mNickToClientGlobalMap.end())
                     {
                         Logger::log(ERROR, "Client not found, sending ERR_NOSUCHNICK");
+                        errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                         errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHNICK);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                         errMessageToClient.mMessageTokens.push_back(":Client not found");
                         clientData->getServerToClientSendQueue().push(errMessageToClient);
                         Server::logClientData(clientData);
@@ -1547,7 +1669,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":You have not registered yet");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1565,7 +1690,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelName.length() == 0)
                 {
                     Logger::log(ERROR, "Channel name is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1575,7 +1703,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName[0] != '#' && channelName[0] != '&')
                 {
                     Logger::log(ERROR, "Invalid channel name, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Invalid channel name");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1584,7 +1715,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (channelName.length() > MAX_CHANNEL_NAME_LENGTH)
                 {
                     Logger::log(ERROR, "Channel name is too long, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel name is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1596,7 +1730,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelIter == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel not found");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1608,7 +1745,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToOperatorClientsMap().find(clientData->getClientNickname()) == channel->getNickToOperatorClientsMap().end())
                 {
                     Logger::log(ERROR, "Client is not operator, sending ERR_CHANOPRIVSNEEDED");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_CHANOPRIVSNEEDED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Client is not operator");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1620,7 +1760,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (userToKick.length() == 0)
                 {
                     Logger::log(ERROR, "User to kick is empty, sending ERR_NEEDMOREPARAMS");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back("User to kick is empty");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1629,7 +1772,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 else if (userToKick.length() > MAX_NICKNAME_LENGTH)
                 {
                     Logger::log(ERROR, "User to kick is too long, sending ERR_NOSUCHNICK");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHNICK);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":User to kick is too long");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1639,7 +1785,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToClientDataMap().find(userToKick) == channel->getNickToClientDataMap().end())
                 {
                     Logger::log(ERROR, "User not found in the channel, sending ERR_NOSUCHNICK");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHNICK);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":User not found in the channel");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1647,7 +1796,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 }
 
                 ClientData* clientToKick = channel->getNickToClientDataMap().find(userToKick)->second;
-                
+
                 // remove user from channel
                 successMessageToClient.mCommand = NONE;
                 successMessageToClient.mMessageTokens.clear();
@@ -1677,7 +1826,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":You have not registered yet");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1686,7 +1838,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (messageToExecute.mMessageTokens.size() < paramStartPos + 2)
             {
                 Logger::log(ERROR, "Not enough parameters, sending ERR_NEEDMOREPARAMS");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":Not enough parameters");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1701,7 +1856,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelIter == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(ERROR, "Channel not found, sending ERR_NOSUCHCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel not found");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1713,7 +1871,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToClientDataMap().find(clientData->getClientNickname()) == channel->getNickToClientDataMap().end())
                 {
                     Logger::log(ERROR, "Client is not in the channel, sending ERR_NOTONCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOTONCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Client is not in the channel");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1723,7 +1884,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToClientDataMap().find(messageToExecute.mMessageTokens[paramStartPos]) != channel->getNickToClientDataMap().end())
                 {
                     Logger::log(ERROR, "User is already in the channel, sending ERR_USERONCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_USERONCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":User is already in the channel");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1733,7 +1897,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToOperatorClientsMap().find(clientData->getClientNickname()) == channel->getNickToOperatorClientsMap().end())
                 {
                     Logger::log(ERROR, "Client is not operator, sending ERR_CHANOPRIVSNEEDED");
+                    errMessageToClient.mHasPrefix = true;
+                    errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_CHANOPRIVSNEEDED);
+                    errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Client is not operator");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1744,7 +1911,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (invitedClientIter == mNickToClientGlobalMap.end())
                 {
                     Logger::log(ERROR, "User not found, sending ERR_NOSUCHNICK");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOSUCHNICK);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":User not found");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1755,7 +1925,7 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 invitedClient->getServerToClientSendQueue().push(messageToExecute);
 
-    
+
                 // successMessageToClient.mCommand = NONE;
                 // successMessageToClient.mMessageTokens.clear();
                 // successMessageToClient.mHasPrefix = true;
@@ -1766,7 +1936,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                 // successMessageToClient.mMessageTokens.push_back(":Invited to channel");
                 // clientData->getServerToClientSendQueue().push(successMessageToClient);
 
-            
+
                 // Server::connectClientDataWithChannel(invitedClient, channel);
                 // :euroserv.fr.quakenet.org 221 haelime +i
                 // :haelime!~a@121.135.181.41 MODE haelime +i
@@ -1798,14 +1968,14 @@ void Server::executeParsedMessages(ClientData* clientData)
 
                 // Message nameReply = channel->getNameReply();
                 // Message endOfNamesMessage = channel->getEndOfNames();
-                
+
                 // for (std::map<std::string, ClientData*>::iterator it = channel->getNickToClientDataMap().begin(); it != channel->getNickToClientDataMap().end(); it++)
                 // {
                 //     it->second->getServerToClientSendQueue().push(nameReply);
                 //     invitedClient->getServerToClientSendQueue().push(endOfNamesMessage);
                 // }
 
-                
+
 
                 // 332 353 366 to client (topic, names, endofnames)
                 Server::sendChannelJoinSucessMessageToClientData(invitedClient, channel);
@@ -1853,7 +2023,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":You have not registered yet");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -1870,7 +2043,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelIter == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(ERROR, "Channel not found, sending ERR_NOTONCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOTONCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel not found");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1882,7 +2058,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToClientDataMap().find(clientData->getClientNickname()) == channel->getNickToClientDataMap().end())
                 {
                     Logger::log(ERROR, "Client is not in the channel, sending ERR_NOTONCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOTONCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Client is not in the channel");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -1895,7 +2074,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     successMessageToClient.mCommand = TOPIC;
                     successMessageToClient.mMessageTokens.clear();
                     successMessageToClient.mHasPrefix = true;
-                    successMessageToClient.mMessageTokens.push_back(":"+clientData->getClientNickname());
+                    successMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname());
                     successMessageToClient.mMessageTokens.push_back(channel->getName());
                     successMessageToClient.mMessageTokens.push_back(channel->getTopic());
                     clientData->getServerToClientSendQueue().push(successMessageToClient);
@@ -1919,7 +2098,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     successMessageToClient.mCommand = TOPIC;
                     successMessageToClient.mMessageTokens.clear();
                     successMessageToClient.mHasPrefix = true;
-                    successMessageToClient.mMessageTokens.push_back(":"+clientData->getClientNickname());
+                    successMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname());
                     successMessageToClient.mMessageTokens.push_back("TOPIC");
                     successMessageToClient.mMessageTokens.push_back(channel->getName());
                     successMessageToClient.mMessageTokens.push_back(channel->getTopic());
@@ -1934,7 +2113,10 @@ void Server::executeParsedMessages(ClientData* clientData)
             if (clientData->getIsReadyToChat() == false)
             {
                 Logger::log(ERROR, "Client is not ready to chat, sending ERR_NOTREGISTERED");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NOTREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":You have not registered yet");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 Server::logClientData(clientData);
@@ -2031,7 +2213,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channelIter == mNameToChannelGlobalMap.end())
                 {
                     Logger::log(ERROR, "Channel not found, sending ERR_NOTONCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOTONCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Channel not found");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -2043,7 +2228,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToClientDataMap().find(clientData->getClientNickname()) == channel->getNickToClientDataMap().end())
                 {
                     Logger::log(ERROR, "Client is not in the channel, sending ERR_NOTONCHANNEL");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NOTONCHANNEL);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Client is not in the channel");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -2054,7 +2242,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (channel->getNickToOperatorClientsMap().find(clientData->getClientNickname()) == channel->getNickToOperatorClientsMap().end())
                 {
                     Logger::log(ERROR, "Client is not operator, sending ERR_CHANOPRIVSNEEDED");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_CHANOPRIVSNEEDED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Client is not operator");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -2064,8 +2255,11 @@ void Server::executeParsedMessages(ClientData* clientData)
                 // parse modes
                 std::string modeParams;
                 if (messageToExecute.mMessageTokens.size() > paramStartPos + 1)
-                     modeParams = messageToExecute.mMessageTokens[paramStartPos + 2];
+                    modeParams = messageToExecute.mMessageTokens[paramStartPos + 2];
                 std::string mode = messageToExecute.mMessageTokens[paramStartPos + 1];
+
+                Logger::log(DEBUG, "mode: " + mode);
+                Logger::log(DEBUG, "modeParams: " + modeParams);
 
                 if (mode.length() == 0)
                 {
@@ -2082,7 +2276,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (mode.length() > 3)
                 {
                     Logger::log(ERROR, "Too many modes, sending ERR_UNKNOWNMODE");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNMODE);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Too many mode");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -2092,7 +2289,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                 if (mode[0] != '+' && mode[0] != '-')
                 {
                     Logger::log(ERROR, "Invalid mode, sending ERR_UNKNOWNMODE");
+                    errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNMODE);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back(":Invalid mode");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
@@ -2102,55 +2302,40 @@ void Server::executeParsedMessages(ClientData* clientData)
                 // if ()
 
                 // SET MODES
-                for (size_t i = 0; i < mode.length(); i++)
+                // for (size_t i = 0; i < mode.length(); i++)
                 {
-                    if (mode[i] == '+')
+                    if (mode[0] == '+')
                     {
                         // set mode
-                        switch (mode[i + 1])
+                        switch (mode[1])
                         {
                         case 'i':
                             channel->setInviteOnly(true);
                             break;
+
                         case 't':
                             channel->setTopicRestricted(true);
                             break;
+
+                            // setting channel key
                         case 'k':
-                            if (mode.length() == 0)
-                            {
-                                Logger::log(ERROR, "Channel key is empty, sending ERR_KEYSET");
-                                errMessageToClient.mMessageTokens.push_back(ERR_KEYSET);
-                                errMessageToClient.mMessageTokens.push_back(":Channel key is empty");
-                                clientData->getServerToClientSendQueue().push(errMessageToClient);
-                                Server::logClientData(clientData);
-                                assert(false);
-                                return;
-                            }
-                            channel->setPassword(mode);
+                            channel->setPassword(modeParams);
                             break;
+
                         case 'o':
-                            // give operator privilege
-                            if (channel->getNickToOperatorClientsMap().find(mode) == channel->getNickToOperatorClientsMap().end())
-                            {
-                                channel->getNickToOperatorClientsMap()[mode] = mNickToClientGlobalMap.find(mode)->second;
-                            }
+                            channel->getNickToOperatorClientsMap()[modeParams] = mNickToClientGlobalMap[modeParams];
                             break;
+
                         case 'l':
-                            if (mode.length() == 0)
-                            {
-                                Logger::log(ERROR, "User limit is empty, sending ERR_NEEDMOREPARAMS");
-                                errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
-                                errMessageToClient.mMessageTokens.push_back(":User limit is empty");
-                                clientData->getServerToClientSendQueue().push(errMessageToClient);
-                                Server::logClientData(clientData);
-                                assert(false);
-                                return;
-                            }
-                            channel->setUserLimit(atoi(mode.c_str()));
+                            channel->setUserLimit(std::stoi(modeParams));
                             break;
+
                         default:
                             Logger::log(ERROR, "Invalid mode, sending ERR_UNKNOWNMODE");
+                            errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                             errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNMODE);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                             errMessageToClient.mMessageTokens.push_back(":Invalid mode");
                             clientData->getServerToClientSendQueue().push(errMessageToClient);
                             Server::logClientData(clientData);
@@ -2158,10 +2343,10 @@ void Server::executeParsedMessages(ClientData* clientData)
                             return;
                         }
                     }
-                    else if (mode[i] == '-')
+                    else if (mode[0] == '-')
                     {
                         // remove mode
-                        switch (mode[i + 1])
+                        switch (mode[1])
                         {
                         case 'i':
                             channel->setInviteOnly(false);
@@ -2171,29 +2356,33 @@ void Server::executeParsedMessages(ClientData* clientData)
                             break;
                         case 'k':
                             channel->clearPassword();
+
                             break;
                         case 'o':
-                            // take operator privilege
-                            if (channel->getNickToOperatorClientsMap().find(mode) != channel->getNickToOperatorClientsMap().end())
-                            {
-                                Logger::log(DEBUG, "Removing operator privilege");
-                                channel->getNickToOperatorClientsMap().erase(mode);
-                            }
+                            channel->getNickToOperatorClientsMap().erase(modeParams);
+
                             break;
                         case 'l':
                             channel->setUserLimit(0);
+
                             break;
                         default:
                             Logger::log(ERROR, "Invalid mode, sending ERR_UNKNOWNMODE");
+                            errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                             errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNMODE);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                             errMessageToClient.mMessageTokens.push_back(":Invalid mode");
                             clientData->getServerToClientSendQueue().push(errMessageToClient);
                             Server::logClientData(clientData);
                             assert(false);
                             return;
                         }
+                        // send message to all clients in the channel
+                        Message nameReply = channel->getNameReply(&mServerAddress, clientData);
+                        Message endOfNamesMessage = channel->getEndOfNames(&mServerAddress, clientData);
                     }
-                    
+
                     // MODE 처음부터 다시 짜기!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                     // JOIN -> PASSWORD 틀렸는데도 성공 메시지 뜨는 거 수정해야함
                     // MODE -> t, i 완벽
@@ -2204,10 +2393,12 @@ void Server::executeParsedMessages(ClientData* clientData)
                     successMessageToClient.mCommand = MODE;
                     successMessageToClient.mMessageTokens.clear();
                     successMessageToClient.mHasPrefix = true;
-                    successMessageToClient.mMessageTokens.push_back(":"+clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
+                    successMessageToClient.mMessageTokens.push_back(":" + clientData->getClientNickname() + "!" + clientData->getUsername() + "@" + clientData->getHostname());
                     successMessageToClient.mMessageTokens.push_back("MODE");
                     successMessageToClient.mMessageTokens.push_back(channel->getName());
                     successMessageToClient.mMessageTokens.push_back(mode);
+                    if (modeParams.length() > 0)
+                        successMessageToClient.mMessageTokens.push_back(modeParams);
                     // if ()
 
                     Server::sendMessagetoChannel(channel, successMessageToClient);
@@ -2231,7 +2422,10 @@ void Server::executeParsedMessages(ClientData* clientData)
 
         default:
             Logger::log(WARNING, "Unknown command, sending ERR_UNKNOWNCOMMAND");
+            errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
             errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
             errMessageToClient.mMessageTokens.push_back(":Unknown command");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             Server::logClientData(clientData);
@@ -2379,7 +2573,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Server::logMessage(messageToExecute);
                 Logger::log(WARNING, "Sending ERR_UNKNOWNCOMMAND");
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":Unknown command");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 assert(false);
@@ -2390,7 +2587,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
             {
                 Logger::log(WARNING, "Nickname collision, sending ERR_NICKNAMEINUSE");
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NICKNAMEINUSE);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back(":Nickname collision");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 assert(false);
@@ -2407,6 +2607,8 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
             Server::logMessage(messageToExecute);
             Logger::log(WARNING, "Sending ERR_UNKNOWNCOMMAND");
             Message errMessageToClient;
+            errMessageToClient.mHasPrefix = true;
+            errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
             errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
             errMessageToClient.mMessageTokens.push_back(":Unknown command");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -2425,7 +2627,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Disconnecting client");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("PASS");
                 errMessageToClient.mMessageTokens.push_back("Not enough parameters");
                 errMessageToClient.mMessageTokens.push_back("Password Missmatched, disconnecting...");
@@ -2454,7 +2659,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Disconnecting client");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_PASSWDMISMATCH);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("PASS");
                 errMessageToClient.mMessageTokens.push_back("Password is too long");
                 errMessageToClient.mMessageTokens.push_back("Password Missmatched, disconnecting...");
@@ -2485,7 +2693,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Invalid messageToExecute");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("NICK");
                 errMessageToClient.mMessageTokens.push_back("Not enough parameters");
 
@@ -2500,7 +2711,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Nickname collision, sending ERR_NICKCOLLISION");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NICKCOLLISION);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("Nickname collision");
 
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -2519,7 +2733,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Invalid messageToExecute");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("USER");
                 errMessageToClient.mMessageTokens.push_back("Not enough parameters");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -2533,7 +2750,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Server::logMessage(messageToExecute);
                 // send ERR_ALREADYREGISTRED
                 Message errMessageToClient;
-                errMessageToClient.mMessageTokens.push_back("Ivalid user input");
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                errMessageToClient.mMessageTokens.push_back("Invalid user input");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
                 assert(false);
                 continue;
@@ -2550,7 +2770,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Invalid messageToExecute");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("JOIN");
                 errMessageToClient.mMessageTokens.push_back("Not enough parameters");
                 clientData->getServerToClientSendQueue().push(errMessageToClient);
@@ -2571,7 +2794,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Invalid messageToExecute");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("PART");
                 errMessageToClient.mMessageTokens.push_back("Not enough parameters");
 
@@ -2585,7 +2811,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 Logger::log(WARNING, "Invalid messageToExecute");
                 Server::logMessage(messageToExecute);
                 Message errMessageToClient;
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                 errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                 errMessageToClient.mMessageTokens.push_back("PART");
                 errMessageToClient.mMessageTokens.push_back("Not enough parameters");
 
@@ -2638,7 +2867,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
                 {
                     Logger::log(WARNING, "Reason is too long, sending ERR_NEEDMOREPARAMS");
                     Message errMessageToClient;
+                    errMessageToClient.mHasPrefix = true;
+                    errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
                     errMessageToClient.mMessageTokens.push_back(ERR_NEEDMOREPARAMS);
+                    errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
                     errMessageToClient.mMessageTokens.push_back("QUIT");
                     errMessageToClient.mMessageTokens.push_back("Reason is too long, skipping");
                     errMessageToClient.mMessageTokens.push_back("Disconnecting...");
@@ -2689,7 +2921,10 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
         {
             Logger::log(ERROR, "Invalid command, sending ERR_UNKNOWNCOMMAND");
             Message errMessageToClient;
+            errMessageToClient.mHasPrefix = true;
+            errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
             errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
+            errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
             errMessageToClient.mMessageTokens.push_back(":Unknown command");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             continue;
