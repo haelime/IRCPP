@@ -1,7 +1,7 @@
 #pragma once
 
 #include <arpa/inet.h>
-#include <time.h>
+#include <ctime>
 #include <string>
 #include <map>
 #include "Channel.hpp"
