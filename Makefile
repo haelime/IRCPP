@@ -2,7 +2,7 @@ TARGET = ircserv
 
 CXX = c++
 
-CXXFLAGS = -Wall -Werror -Wextra -std=c++98\
+CXXFLAGS = -Wall -Werror -Wextra -std=c++98 -DNODEBUG\
 # -g -fsanitize=address # DEBUG
 
 CWD = $(shell pwd)
@@ -19,6 +19,14 @@ OBJECTS = $(SOURCE:.cpp=.o)\
 
 HEADERS = -I./include/\
 
+LIBPATH =
+
+# Kqueue support for Linux (libkqueue-dev package required)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+    HEADERS += -I/usr/include/kqueue/
+    LIBPATH += -L/usr/lib/x86_64-linux-gnu/ -lkqueue
+endif
 
 all: $(TARGET)
 
@@ -26,7 +34,7 @@ all: $(TARGET)
 	$(CXX) $(CXXFLAGS) -c $< -o $@ $(HEADERS)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(HEADERS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(HEADERS) $(LIBPATH)
 
 clean:
 	rm -f $(OBJECTS)
