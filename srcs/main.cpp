@@ -32,11 +32,10 @@ int main (int argc, char **argv)
     Logger::setFileLogging("IrcServer.log");
     Logger::setLogLevel(DEBUG | INFO | WARNING | ERROR | FATAL | DEFAULT | SEND | RECV);
 
-    while (server.initServer(argc, argv) == false)
+    if (server.initServer(argc, argv) == false)
     {
         Logger::log(ERROR, "Server initialization failed");
-        Logger::log(ERROR, "Retrying in 10 seconds...");
-        sleep(10);
+        return 1;
     }
     server.run();
 

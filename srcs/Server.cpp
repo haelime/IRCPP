@@ -2510,7 +2510,7 @@ bool Server::setPortAndPassFromArgv(int argc, char** argv)
         return false;
 
     mServerPassword = argv[2];
-    if (mServerPassword.length() > MAX_PASSWORD_LENGTH)
+    if (mServerPassword.length() > MAX_PASSWORD_LENGTH || mServerPassword.length() <= 0)
         return false;
 
 
