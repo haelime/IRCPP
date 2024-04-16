@@ -2,7 +2,7 @@ TARGET = ircserv
 
 CXX = c++
 
-CXXFLAGS = -Wall -Werror -Wextra -std=c++98 -DNODEBUG\
+CXXFLAGS = -Wall -Werror -Wextra -std=c++98 -DNDEBUG\
 # -g -fsanitize=address # DEBUG
 
 CWD = $(shell pwd)
