@@ -33,13 +33,13 @@ bool Server::initServer(int argc, char** argv)
     // mServerAddress.sin_addr.s_addr = INADDR_ANY;
     mServerAddress.sin_port = htons(mPort);
     mServerAddress.sin_family = AF_INET;
-    // mServerAddress.sin_len = sizeof(mServerAddress);
-    // mServerAddressLength = mServerAddress.sin_len;
+    mServerAddress.sin_len = sizeof(mServerAddress);
+    mServerAddressLength = mServerAddress.sin_len;
 
     // Bind listen socket
     Logger::log(DEBUG, "Server is binding socket...");
     if (SOCKET_ERROR == bind(mServerListenSocket, (const sockaddr*)&mServerAddress,
-        sizeof(mServerAddress)))
+        mServerAddress.sin_len))
     {
         Logger::log(ERROR, "Failed to bind socket");
         Logger::log(ERROR, "Probably port is already in use");
@@ -171,7 +171,13 @@ void Server::run()
                 // Find the clientData
                 Logger::log(DEBUG, "Finding clientData object");
                 // TODO : change to .find() instead of operator[] for preventing creating new ClientData object when not found
-                Server::disconnectClientDataFromServer(mFdToClientGlobalMap[filteredEvents[i].ident]);
+                if (mFdToClientGlobalMap.find(filteredEvents[i].ident) == mFdToClientGlobalMap.end())
+                {
+                    Logger::log(WARNING, "ClientData not found");
+                    continue;
+                }
+                else
+                    Server::disconnectClientDataFromServer(mFdToClientGlobalMap[filteredEvents[i].ident]);
                 // assert(0);
             }
             else if (filteredEvents[i].filter == EVFILT_READ)
@@ -248,7 +254,6 @@ void Server::run()
 
                     // it's same as mFdToClientGlobalMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     Logger::log(DEBUG, "Adding new clientData object to map");
-                    mFdToClientGlobalMap.insert(std::pair<SOCKET_FD, ClientData*>(newClientSocket, newClientData));
                     mFdToClientGlobalMap[newClientSocket] = newClientData;
                     Logger::log(DEBUG, "New clientData object added to map");
                 }
@@ -577,7 +582,21 @@ void Server::executeParsedMessages(ClientData* clientData)
             // connection is made.  If a PASS command has been sent and a NICK
             // command is not received in the same session, a nick name of "anonymous"
             // SHOULD be assigned.
+            if (clientData->getIsPassed() == true)
+            {
+                Logger::log(WARNING, "Client " + clientData->getClientNickname() + " already passed");
 
+                errMessageToClient.mCommand = NONE;
+                errMessageToClient.mMessageTokens.clear();
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                errMessageToClient.mMessageTokens.push_back(ERR_ALREADYREGISTERED);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                errMessageToClient.mMessageTokens.push_back(":*** You already passed");
+                clientData->getServerToClientSendQueue().push(errMessageToClient);
+
+                break;
+            }
 
             // When PASS is done, response back with NOTICE AUTH :*** Looking up your hostname...
             if (mServerPassword == "" || (mServerPassword.length() == messageToExecute.mMessageTokens[commandStartPos + 1].length() && mServerPassword == messageToExecute.mMessageTokens[commandStartPos + 1]))
@@ -597,18 +616,16 @@ void Server::executeParsedMessages(ClientData* clientData)
             }
             else
             {
-                Logger::log(WARNING, "Invalid password, disconnecting client");
+                Logger::log(WARNING, "Invalid password, sending ERR_PASSWDMISMATCH");
 
-                // We Cannot Send The Message To Client.
-
-                // Server::logMessage(messageToExecute);
-                // Message errMessageToClient;
-                // errMessageToClient.mMessageTokens.push_back(ERR_PASSWDMISMATCH);
-                // errMessageToClient.mMessageTokens.push_back(":*** Password Missmatched, disconnecting...");
-                // clientData->getServerToClientSendQueue().push(errMessageToClient);
-
-                Server::disconnectClientDataFromServer(clientData);
-                Logger::log(DEBUG, "Client disconnected");
+                errMessageToClient.mCommand = NONE;
+                errMessageToClient.mMessageTokens.clear();
+                errMessageToClient.mHasPrefix = true;
+                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                errMessageToClient.mMessageTokens.push_back(ERR_PASSWDMISMATCH);
+                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                errMessageToClient.mMessageTokens.push_back(":*** Invalid password");
+                clientData->getServerToClientSendQueue().push(errMessageToClient);
 
                 break;
             }
@@ -2292,7 +2309,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     errMessageToClient.mMessageTokens.push_back(":Too many mode");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
-                    assert(false);
+                    // assert(false);
                     return;
                 }
                 if (mode[0] != '+' && mode[0] != '-')
@@ -2305,7 +2322,7 @@ void Server::executeParsedMessages(ClientData* clientData)
                     errMessageToClient.mMessageTokens.push_back(":Invalid mode");
                     clientData->getServerToClientSendQueue().push(errMessageToClient);
                     Server::logClientData(clientData);
-                    assert(false);
+                    // assert(false);
                     return;
                 }
                 // if ()
@@ -2336,13 +2353,38 @@ void Server::executeParsedMessages(ClientData* clientData)
                             break;
 
                         case 'l':
-                            for (size_t i = 0; i< modeParams.length(); i++)
+                        {
+                            for (size_t i = 0; i < modeParams.length(); i++)
                             {
                                 if (!isdigit(modeParams[i]))
+                                {
+                                    Logger::log(ERROR, "Invalid mode, sending ERR_UNKNOWNMODE");
+                                    errMessageToClient.mHasPrefix = true;
+                                    errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                                    errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNMODE);
+                                    errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                                    errMessageToClient.mMessageTokens.push_back(":Invalid mode");
+                                    clientData->getServerToClientSendQueue().push(errMessageToClient);
+                                    Server::logClientData(clientData);
                                     return;
+                                }
                             }
-                            channel->setUserLimit(std::atoi(modeParams.c_str()));
-                            break;
+                            int limitNum = std::atoi(modeParams.c_str());
+                            if (limitNum > 9999 || limitNum < 1)
+                            {
+                                Logger::log(ERROR, "Invalid mode, sending ERR_UNKNOWNMODE");
+                                errMessageToClient.mHasPrefix = true;
+                                errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
+                                errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNMODE);
+                                errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
+                                errMessageToClient.mMessageTokens.push_back(":Invalid mode");
+                                clientData->getServerToClientSendQueue().push(errMessageToClient);
+                                Server::logClientData(clientData);
+                                return;
+                            }
+                            channel->setUserLimit(limitNum);
+                        }
+                        break;
 
                         default:
                             Logger::log(ERROR, "Invalid mode, sending ERR_UNKNOWNMODE");
@@ -2624,6 +2666,7 @@ bool Server::parseReceivedRequestFromClientData(ClientData* clientData)
             errMessageToClient.mHasPrefix = true;
             errMessageToClient.mMessageTokens.push_back(":" + std::string(inet_ntoa(clientData->getClientAddress().sin_addr)));
             errMessageToClient.mMessageTokens.push_back(ERR_UNKNOWNCOMMAND);
+            errMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
             errMessageToClient.mMessageTokens.push_back(":Unknown command");
             clientData->getServerToClientSendQueue().push(errMessageToClient);
             // assert(false);
@@ -3107,6 +3150,8 @@ void Server::disconnectClientDataWithChannel(ClientData* clientData, Channel* ch
 
 void Server::disconnectClientDataFromServer(ClientData* clientData)
 {
+    if (clientData == NULL)
+        return;
     // delete clientData
     Logger::log(DEBUG, "Deleting clientData");
     Server::logClientData(clientData);
@@ -3233,7 +3278,7 @@ void Server::sendWelcomeMessageToClientData(ClientData* clientData)
         successMessageToClient.mMessageTokens.push_back(RPL_CREATED);
         successMessageToClient.mMessageTokens.push_back(clientData->getClientNickname());
         std::string timeNow = std::ctime(&mServerStartTime);
-        timeNow.erase(timeNow.length()-1, 1);
+        timeNow.erase(timeNow.length()-2, 1);
         successMessageToClient.mMessageTokens.push_back(":This server was created " + timeNow);
         clientData->getServerToClientSendQueue().push(successMessageToClient);
     }
